@@ -1,0 +1,20 @@
+{
+  "code": "c",
+  "name": "C",
+  "kind": "code",
+  "family_id": 5,
+  "extensions": [
+    ".c",
+    ".h"
+  ],
+  "comment": [
+    "//",
+    "/*"
+  ],
+  "strings": [
+    "\""
+  ],
+  "indent": "either",
+  "chunk_strategy": "delimiter",
+  "notes": "Preprocessor blocks are not statements. Keep #include with the chunk that uses it."
+}

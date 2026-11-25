@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><title>Byte-pair encoding, and why fertility is the number to watch</title></head>
+<body>
+<article>
+<h1>Byte-pair encoding</h1>
+<p>Byte-pair encoding starts with a vocabulary of single bytes and repeatedly merges the most frequent adjacent pair into a new token. The result is a vocabulary that represents common words as one token and rare words as a short sequence of pieces. Because it starts from bytes, no input is unrepresentable and there is no unknown token to handle.</p>
+<p>Fertility is the number of tokens a tokenizer produces per word. A tokenizer trained on English prose and then used on source code has high fertility on code, because identifiers and punctuation were never merged. High fertility costs context length and costs training time, and it is invisible unless it is measured.</p>
+<h2>Vocabulary size</h2>
+<p>A larger vocabulary means shorter sequences and a larger embedding table. At small model sizes the embedding table can be a large fraction of the parameters, which is why tying the output projection to the input embedding is common. A vocabulary of eight thousand tokens is a reasonable starting point for a corpus of a few hundred million tokens.</p>
+<p>The training corpus for the tokenizer should be the corpus the model will read. A tokenizer is not a general-purpose artifact; it is a compression scheme fitted to one distribution of text.</p>
+</article>
+</body></html>

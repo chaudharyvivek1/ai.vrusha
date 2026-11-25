@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><title>Numeric addresses for a knowledge store</title></head>
+<body>
+<article>
+<h1>Numeric addresses</h1>
+<p>An address is a short list of numbers that says where a unit of data sits in a tree of meaning. The first number is the domain, the second is the family, the third is the kind, the fourth is the cluster and the fifth is the position inside the cluster. Reading the address left to right moves from the general to the specific.</p>
+<p>Distance between two addresses is computed with weights that halve at each level. A difference in the domain counts sixteen times a difference in the position. That is deliberate: two pieces of data in different domains are different material even if they happen to discuss the same word, while two pieces in the same cluster are neighbours and should be offered together.</p>
+<h2>Prefixes are folders</h2>
+<p>A prefix of an address is a real folder. Everything whose address starts with two dot three lives in the two dot three region. This makes browsing possible without a second data structure: the address tree is the folder tree, and the folder tree is the index.</p>
+<p>When the store is merged or filtered, addresses change. Every change is written to an address log with the pass that made it, so a reflow can be audited. Compacting the positions inside a cluster after a merge keeps the numbers dense, which keeps the distance meaningful.</p>
+</article>
+</body></html>

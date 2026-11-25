@@ -1,0 +1,19 @@
+{
+  "level": 2,
+  "name": "legal",
+  "description": "Level 2: legal. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "copyright.max_quote_chars",
+      "action": "warn",
+      "value": 2000,
+      "rationale": "Quoting a whole article into an answer is republication. Long passages are summarised, not reproduced."
+    },
+    {
+      "id": "copyright.store_full_text",
+      "action": "allow",
+      "value": "private_only",
+      "rationale": "Full text is stored locally for retrieval. It is never republished; the store is a private index, not a library."
+    }
+  ]
+}

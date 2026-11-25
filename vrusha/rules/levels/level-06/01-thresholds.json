@@ -1,0 +1,31 @@
+{
+  "level": 6,
+  "name": "quality",
+  "description": "Level 6: quality. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "quality.min_words",
+      "action": "set",
+      "value": 120,
+      "rationale": "Under this a page is usually a stub, a 404 or a cookie wall."
+    },
+    {
+      "id": "quality.min_text_ratio",
+      "action": "set",
+      "value": 0.45,
+      "rationale": "Visible text divided by raw bytes. Below this the page is markup and navigation, not content."
+    },
+    {
+      "id": "quality.max_link_density",
+      "action": "set",
+      "value": 0.3,
+      "rationale": "A page that is mostly links is an index page. It belongs in the frontier, not in the corpus."
+    },
+    {
+      "id": "quality.boilerplate_strip",
+      "action": "set",
+      "value": true,
+      "rationale": "Navigation, cookie banners and footers appear on every page and would dominate the token counts."
+    }
+  ]
+}

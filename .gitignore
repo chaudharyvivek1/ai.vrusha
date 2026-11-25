@@ -1,0 +1,31 @@
+# data produced by the pipeline
+data/
+*.db
+*.db-journal
+*.db-wal
+*.sqlite
+kb/
+raw/
+manifests/
+shards/
+models/
+checkpoints/
+*.pt
+*.bin
+*.npy
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.env
+
+# tooling
+.pytest_cache/
+.ruff_cache/
+.DS_Store

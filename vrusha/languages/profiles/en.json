@@ -1,0 +1,53 @@
+{
+  "code": "en",
+  "name": "English",
+  "kind": "natural",
+  "family_id": 1,
+  "script": "Latn",
+  "direction": "ltr",
+  "sentence_end": [
+    ".",
+    "!",
+    "?"
+  ],
+  "stopwords": [
+    "the",
+    "of",
+    "and",
+    "to",
+    "in",
+    "a",
+    "is",
+    "that",
+    "for",
+    "it",
+    "as",
+    "with",
+    "was",
+    "on",
+    "be",
+    "by",
+    "this",
+    "are",
+    "or",
+    "from"
+  ],
+  "markers": [
+    "the",
+    "and",
+    "of",
+    "to",
+    "is",
+    "that",
+    "with",
+    "for",
+    "was",
+    "are"
+  ],
+  "grammar": {
+    "word_order": "SVO",
+    "morphology": "analytic — word order and auxiliaries carry the grammar",
+    "articles": "definite and indefinite articles are obligatory",
+    "notes": "Hyphenated compounds and phrasal verbs mean a word boundary is not a meaning boundary."
+  }
+}

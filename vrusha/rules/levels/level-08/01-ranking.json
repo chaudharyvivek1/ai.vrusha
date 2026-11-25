@@ -1,0 +1,35 @@
+{
+  "level": 8,
+  "name": "retrieval",
+  "description": "Level 8: retrieval. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "retrieval.top_k",
+      "action": "set",
+      "value": 8,
+      "rationale": "Eight chunks is about 10 KB of context: enough to answer, small enough to fit beside the model."
+    },
+    {
+      "id": "retrieval.candidates",
+      "action": "set",
+      "value": 60,
+      "rationale": "Retrieve wide, rank narrow. 60 candidates is cheap and keeps recall from depending on one scorer."
+    },
+    {
+      "id": "retrieval.fusion",
+      "action": "set",
+      "value": {
+        "bm25": 1.0,
+        "vector": 1.0,
+        "address": 0.35
+      },
+      "rationale": "Lexical and semantic search fail on different queries. Address proximity is a tiebreaker, not a primary signal."
+    },
+    {
+      "id": "retrieval.refuse_below",
+      "action": "set",
+      "value": 0.02,
+      "rationale": "Under this the answer is 'not in the store'. A confident answer from weak evidence is the one failure mode that destroys trust."
+    }
+  ]
+}

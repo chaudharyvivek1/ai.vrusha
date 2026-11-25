@@ -1,0 +1,31 @@
+{
+  "level": 7,
+  "name": "dedup",
+  "description": "Level 7: dedup. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "dedup.near_duplicate_threshold",
+      "action": "set",
+      "value": 0.97,
+      "rationale": "Above this two units say the same thing. The canonical one is kept and the other is linked to it, never deleted."
+    },
+    {
+      "id": "dedup.exact_hash",
+      "action": "set",
+      "value": true,
+      "rationale": "Identical sha256 is a free, exact check. Run it before any expensive similarity work."
+    },
+    {
+      "id": "dedup.merge.keep",
+      "action": "set",
+      "value": "oldest",
+      "rationale": "The first version is canonical; later copies point at it. Deleting instead of linking would lose the provenance."
+    },
+    {
+      "id": "dedup.cross_family",
+      "action": "set",
+      "value": false,
+      "rationale": "A Python function and a JavaScript function that look similar are not duplicates. Only compare inside a family."
+    }
+  ]
+}

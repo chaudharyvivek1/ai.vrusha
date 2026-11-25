@@ -1,0 +1,54 @@
+{
+  "code": "hi",
+  "name": "Hindi",
+  "kind": "natural",
+  "family_id": 2,
+  "script": "Deva",
+  "direction": "ltr",
+  "sentence_end": [
+    "।",
+    ".",
+    "!",
+    "?"
+  ],
+  "stopwords": [
+    "का",
+    "के",
+    "की",
+    "है",
+    "में",
+    "से",
+    "और",
+    "को",
+    "पर",
+    "यह",
+    "था",
+    "हो",
+    "ने",
+    "लिए",
+    "जो",
+    "कि",
+    "भी",
+    "नहीं",
+    "तो",
+    "हैं"
+  ],
+  "markers": [
+    "है",
+    "के",
+    "में",
+    "का",
+    "और",
+    "को",
+    "से",
+    "की",
+    "पर",
+    "हैं"
+  ],
+  "grammar": {
+    "word_order": "SOV",
+    "morphology": "agglutinative with postpositions — the case marker follows the noun",
+    "script_note": "Devanagari is shared with Marathi; the marker words decide between them",
+    "notes": "The danda (।) ends a sentence, not a full stop. Splitting on '.' alone merges sentences."
+  }
+}

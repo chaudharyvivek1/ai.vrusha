@@ -1,0 +1,17 @@
+{
+  "code": "json",
+  "name": "JSON",
+  "kind": "code",
+  "family_id": 13,
+  "extensions": [
+    ".json",
+    ".jsonl"
+  ],
+  "comment": [],
+  "strings": [
+    "\""
+  ],
+  "indent": "either",
+  "chunk_strategy": "line",
+  "notes": "Structured data, not code. Chunked by top-level key where possible."
+}

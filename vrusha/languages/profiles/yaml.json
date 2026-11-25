@@ -1,0 +1,20 @@
+{
+  "code": "yaml",
+  "name": "YAML",
+  "kind": "code",
+  "family_id": 14,
+  "extensions": [
+    ".yaml",
+    ".yml"
+  ],
+  "comment": [
+    "#"
+  ],
+  "strings": [
+    "\"",
+    "'"
+  ],
+  "indent": "spaces",
+  "chunk_strategy": "line",
+  "notes": "Indentation is structure. A chunk that starts mid-block is unparseable, so split on top-level keys."
+}

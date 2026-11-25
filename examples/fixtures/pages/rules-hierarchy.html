@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><title>A ten-level rule hierarchy for a data pipeline</title></head>
+<body>
+<article>
+<h1>Ten levels of rules</h1>
+<p>Rules in a data pipeline conflict. One rule says store everything that might be useful, another says store nothing whose licence is unknown. A flat list of rules cannot resolve that conflict, because whichever rule runs last wins and nobody can say why.</p>
+<p>A hierarchy resolves it by assigning every rule a level. Level one holds the rules that cannot be overridden: licence, robots exclusion, secrets and personal data. Level ten holds preferences that you may change without thinking. When two rules speak to the same key, the lower level number wins, and the resolver returns the rule it chose along with the rules it beat.</p>
+<h2>Why the trace matters</h2>
+<p>A decision without a trace is indistinguishable from a bug. Printing the winning rule, its rationale and the alternatives that lost turns a mysterious rejection into a two-line explanation, and it makes the rule set reviewable by someone who did not write it.</p>
+<p>Level one rules are written to block rather than to warn, and unknown values are treated as refusals. That asymmetry is the point: a licence you cannot identify is not a licence you may use.</p>
+</article>
+</body></html>

@@ -1,0 +1,25 @@
+{
+  "level": 2,
+  "name": "legal",
+  "description": "Level 2: legal. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "attribution.required",
+      "action": "warn",
+      "value": true,
+      "rationale": "Every stored unit keeps its URL and retrieval date so any output can name its source."
+    },
+    {
+      "id": "attribution.template",
+      "action": "set",
+      "value": "Source: {title} <{url}> (retrieved {retrieved})",
+      "rationale": "One template, used by the composer and the report, so citations look the same everywhere."
+    },
+    {
+      "id": "attribution.keep_copyright_notice",
+      "action": "block",
+      "value": true,
+      "rationale": "A copyright header inside a source file is part of the file. Stripping it would remove the notice the licence requires."
+    }
+  ]
+}

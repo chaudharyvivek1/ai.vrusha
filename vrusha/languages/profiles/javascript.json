@@ -1,0 +1,24 @@
+{
+  "code": "javascript",
+  "name": "JavaScript",
+  "kind": "code",
+  "family_id": 2,
+  "extensions": [
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs"
+  ],
+  "comment": [
+    "//",
+    "/*"
+  ],
+  "strings": [
+    "\"",
+    "'",
+    "`"
+  ],
+  "indent": "either",
+  "chunk_strategy": "delimiter",
+  "notes": "Arrow functions and callbacks mean a brace-depth split can cut a unit in half; the delimiter chunker checks balance before splitting."
+}

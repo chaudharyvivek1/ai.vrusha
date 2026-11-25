@@ -1,0 +1,46 @@
+{
+  "level": 1,
+  "name": "inviolable",
+  "description": "Level 1: inviolable. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "policy.refused_domains",
+      "action": "block",
+      "value": [
+        "stackoverflow.com",
+        "stackexchange.com",
+        "geeksforgeeks.org",
+        "leetcode.com",
+        "hackerrank.com",
+        "interviewbit.com",
+        "tutorialspoint.com",
+        "javatpoint.com",
+        "w3schools.com"
+      ],
+      "rationale": "These sites forbid crawling or reuse in their terms. Refused by name so no configuration can quietly re-enable them."
+    },
+    {
+      "id": "policy.terms_review",
+      "action": "warn",
+      "value": true,
+      "rationale": "A domain not on either list is a judgement call. Warn, record the decision in the manifest, and let the operator decide."
+    },
+    {
+      "id": "policy.personal_data",
+      "action": "block",
+      "value": true,
+      "rationale": "Names, phone numbers, addresses and identifiers of private people are not training data."
+    },
+    {
+      "id": "policy.safety",
+      "action": "block",
+      "value": [
+        "weapons",
+        "exploitation",
+        "malware",
+        "csam"
+      ],
+      "rationale": "No volume of data justifies these. Refused at the gate, not filtered later."
+    }
+  ]
+}

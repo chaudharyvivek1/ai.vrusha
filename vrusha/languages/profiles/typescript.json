@@ -1,0 +1,22 @@
+{
+  "code": "typescript",
+  "name": "TypeScript",
+  "kind": "code",
+  "family_id": 3,
+  "extensions": [
+    ".ts",
+    ".tsx"
+  ],
+  "comment": [
+    "//",
+    "/*"
+  ],
+  "strings": [
+    "\"",
+    "'",
+    "`"
+  ],
+  "indent": "either",
+  "chunk_strategy": "delimiter",
+  "notes": "Generics add angle brackets, so the delimiter chunker must not treat < as a group opener."
+}

@@ -1,0 +1,22 @@
+{
+  "code": "cpp",
+  "name": "C++",
+  "kind": "code",
+  "family_id": 6,
+  "extensions": [
+    ".cpp",
+    ".cc",
+    ".hpp",
+    ".hxx"
+  ],
+  "comment": [
+    "//",
+    "/*"
+  ],
+  "strings": [
+    "\""
+  ],
+  "indent": "either",
+  "chunk_strategy": "delimiter",
+  "notes": "Templates and lambdas make brace counting approximate. Accept the approximation and record it."
+}

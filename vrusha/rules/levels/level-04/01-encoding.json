@@ -1,0 +1,19 @@
+{
+  "level": 4,
+  "name": "language",
+  "description": "Level 4: language. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "encoding.required",
+      "action": "block",
+      "value": "utf-8",
+      "rationale": "One encoding everywhere. Undecodable bytes are dropped, not mojibaked into the corpus."
+    },
+    {
+      "id": "text.normalize_unicode",
+      "action": "set",
+      "value": "NFC",
+      "rationale": "Two spellings of the same character must hash the same, or deduplication silently fails."
+    }
+  ]
+}

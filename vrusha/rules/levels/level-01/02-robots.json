@@ -1,0 +1,19 @@
+{
+  "level": 1,
+  "name": "inviolable",
+  "description": "Level 1: inviolable. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "robots.respect",
+      "action": "block",
+      "value": true,
+      "rationale": "robots.txt is checked before every request, not after. A disallowed path is never fetched."
+    },
+    {
+      "id": "robots.fail_closed",
+      "action": "block",
+      "value": true,
+      "rationale": "If robots.txt cannot be read, treat the site as disallowed. Failing open is how crawlers get blocked."
+    }
+  ]
+}

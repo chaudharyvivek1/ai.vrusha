@@ -1,0 +1,19 @@
+{
+  "code": "java",
+  "name": "Java",
+  "kind": "code",
+  "family_id": 4,
+  "extensions": [
+    ".java"
+  ],
+  "comment": [
+    "//",
+    "/*"
+  ],
+  "strings": [
+    "\""
+  ],
+  "indent": "either",
+  "chunk_strategy": "delimiter",
+  "notes": "One public class per file; methods are the retrieval unit."
+}

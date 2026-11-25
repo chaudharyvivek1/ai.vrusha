@@ -1,0 +1,30 @@
+{
+  "level": 3,
+  "name": "integrity",
+  "description": "Level 3: integrity. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "provenance.required",
+      "action": "block",
+      "value": true,
+      "rationale": "A unit with no source URL cannot be checked and cannot be cited. It does not enter the store."
+    },
+    {
+      "id": "provenance.fields",
+      "action": "block",
+      "value": [
+        "url",
+        "retrieved",
+        "licence",
+        "content_hash"
+      ],
+      "rationale": "These four fields are the minimum that makes a row auditable a year later."
+    },
+    {
+      "id": "provenance.content_hash",
+      "action": "set",
+      "value": "sha256",
+      "rationale": "The hash is how a re-harvest proves the page did not change, and how the duplicate gate finds exact copies."
+    }
+  ]
+}

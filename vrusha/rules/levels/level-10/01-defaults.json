@@ -1,0 +1,37 @@
+{
+  "level": 10,
+  "name": "preference",
+  "description": "Level 10: preference. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "defaults.embed_backend",
+      "action": "prefer",
+      "value": "hash",
+      "rationale": "The hash backend needs nothing and is deterministic. Switch to ollama or sentence-transformers when you want better recall."
+    },
+    {
+      "id": "defaults.search_backend",
+      "action": "prefer",
+      "value": "auto",
+      "rationale": "auto tries a keyed backend, then DuckDuckGo, then the fixture index. It never fails because of a missing key."
+    },
+    {
+      "id": "output.format",
+      "action": "prefer",
+      "value": "text",
+      "rationale": "Plain text in the terminal; --json on any command when a script is reading it."
+    },
+    {
+      "id": "output.no_emoji",
+      "action": "prefer",
+      "value": true,
+      "rationale": "The output is read in a terminal, a log and a diff. Emoji break two of those three."
+    },
+    {
+      "id": "output.max_answer_chars",
+      "action": "prefer",
+      "value": 1200,
+      "rationale": "Long answers get skimmed. The citations are there when more is needed."
+    }
+  ]
+}

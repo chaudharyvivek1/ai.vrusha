@@ -1,0 +1,17 @@
+# Vrusha requirements.
+#
+# The pipeline (harvest -> store -> passes -> query -> tokenize -> dataset)
+# runs on the standard library plus numpy. The two lines below are upgrades,
+# not requirements; install them when you want the fast path.
+numpy>=1.24
+
+# Fast BPE trainer. Without it `vrusha tokenize` uses the pure-python trainer,
+# which is correct but slow above a few million characters.
+tokenizers>=0.15
+
+# Training and generation. Without it `vrusha train` and `vrusha generate`
+# print what is missing instead of running.
+# torch>=2.0        # CPU wheel: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# Optional in-process embedding backend (the default hash backend needs nothing).
+# sentence-transformers>=2.2

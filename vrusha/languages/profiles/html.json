@@ -1,0 +1,20 @@
+{
+  "code": "html",
+  "name": "HTML",
+  "kind": "code",
+  "family_id": 11,
+  "extensions": [
+    ".html",
+    ".htm"
+  ],
+  "comment": [
+    "<!--"
+  ],
+  "strings": [
+    "\"",
+    "'"
+  ],
+  "indent": "either",
+  "chunk_strategy": "paragraph",
+  "notes": "Harvested pages are not training code. HTML is stored as prose once tags are stripped."
+}

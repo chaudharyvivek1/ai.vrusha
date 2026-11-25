@@ -1,0 +1,19 @@
+{
+  "code": "rust",
+  "name": "Rust",
+  "kind": "code",
+  "family_id": 8,
+  "extensions": [
+    ".rs"
+  ],
+  "comment": [
+    "//",
+    "/*"
+  ],
+  "strings": [
+    "\""
+  ],
+  "indent": "spaces",
+  "chunk_strategy": "delimiter",
+  "notes": "impl blocks are the natural unit above fn; keep them whole where they fit."
+}

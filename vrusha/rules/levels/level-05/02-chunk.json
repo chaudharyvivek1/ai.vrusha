@@ -1,0 +1,31 @@
+{
+  "level": 5,
+  "name": "structure",
+  "description": "Level 5: structure. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "chunk.max_lines",
+      "action": "set",
+      "value": 60,
+      "rationale": "One function or one section per chunk. Longer units retrieve worse because the vector averages two topics."
+    },
+    {
+      "id": "chunk.overlap_lines",
+      "action": "set",
+      "value": 3,
+      "rationale": "A little overlap so a function split at the boundary is still findable from either side."
+    },
+    {
+      "id": "chunk.min_chars",
+      "action": "set",
+      "value": 80,
+      "rationale": "Shorter than this is a fragment, not a unit of meaning."
+    },
+    {
+      "id": "schema.version",
+      "action": "set",
+      "value": 1,
+      "rationale": "Bump this when the tables change, so an old database is refused instead of half-read."
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "level": 4,
+  "name": "language",
+  "description": "Level 4: language. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "language.detect_min_confidence",
+      "action": "warn",
+      "value": 0.55,
+      "rationale": "Below this the text is probably mixed or too short. It is flagged so you can look, not silently dropped."
+    },
+    {
+      "id": "language.allowed",
+      "action": "allow",
+      "value": [
+        "en",
+        "hi",
+        "mr",
+        "ta",
+        "bn"
+      ],
+      "rationale": "The natural languages this build carries profiles for. Adding one is a profile file, not a code change."
+    },
+    {
+      "id": "language.code_allowed",
+      "action": "allow",
+      "value": [
+        "python",
+        "javascript",
+        "typescript",
+        "java",
+        "c",
+        "cpp",
+        "go",
+        "rust",
+        "sql",
+        "shell",
+        "html",
+        "css",
+        "json",
+        "yaml",
+        "markdown"
+      ],
+      "rationale": "Programming languages with a chunking profile. A file outside this list is stored as plain text."
+    }
+  ]
+}

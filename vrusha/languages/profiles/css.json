@@ -1,0 +1,20 @@
+{
+  "code": "css",
+  "name": "CSS",
+  "kind": "code",
+  "family_id": 12,
+  "extensions": [
+    ".css",
+    ".scss"
+  ],
+  "comment": [
+    "/*"
+  ],
+  "strings": [
+    "\"",
+    "'"
+  ],
+  "indent": "either",
+  "chunk_strategy": "delimiter",
+  "notes": "A rule block is the unit. At-rules nest, so balance matters."
+}

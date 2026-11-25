@@ -1,0 +1,41 @@
+{
+  "code": "mr",
+  "name": "Marathi",
+  "kind": "natural",
+  "family_id": 3,
+  "script": "Deva",
+  "direction": "ltr",
+  "sentence_end": [
+    "।",
+    ".",
+    "!",
+    "?"
+  ],
+  "stopwords": [
+    "आहे",
+    "आणि",
+    "या",
+    "ते",
+    "मध्ये",
+    "ला",
+    "च्या",
+    "करून",
+    "नाही",
+    "होते"
+  ],
+  "markers": [
+    "आहे",
+    "आणि",
+    "मध्ये",
+    "च्या",
+    "ला",
+    "ते",
+    "करून",
+    "नाही"
+  ],
+  "grammar": {
+    "word_order": "SOV",
+    "morphology": "agglutinative; verb agreement carries person and gender",
+    "notes": "Shares Devanagari with Hindi. Overlap in function words is why detection reports a confidence, not a verdict."
+  }
+}

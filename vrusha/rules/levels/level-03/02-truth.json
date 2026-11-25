@@ -1,0 +1,19 @@
+{
+  "level": 3,
+  "name": "integrity",
+  "description": "Level 3: integrity. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "no_fabrication",
+      "action": "block",
+      "value": true,
+      "rationale": "If retrieval returns nothing above the refusal threshold, the answer is 'I do not have this', never an invented one."
+    },
+    {
+      "id": "timestamp.utc",
+      "action": "set",
+      "value": true,
+      "rationale": "All timestamps are UTC ISO-8601 so a store can be merged with another without a timezone argument."
+    }
+  ]
+}

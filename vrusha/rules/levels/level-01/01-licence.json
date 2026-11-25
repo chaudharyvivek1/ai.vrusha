@@ -1,0 +1,46 @@
+{
+  "level": 1,
+  "name": "inviolable",
+  "description": "Level 1: inviolable. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "licence.allowed",
+      "action": "allow",
+      "value": [
+        "MIT",
+        "Apache-2.0",
+        "BSD-3-Clause",
+        "BSD-2-Clause",
+        "ISC",
+        "MPL-2.0",
+        "Unlicense",
+        "CC0-1.0",
+        "0BSD",
+        "CC-BY-4.0"
+      ],
+      "rationale": "Only these licences permit storing the material and training on it. Anything else is refused, not guessed at."
+    },
+    {
+      "id": "licence.blocked",
+      "action": "block",
+      "value": [
+        "AGPL-3.0",
+        "GPL-3.0",
+        "GPL-2.0",
+        "LGPL-3.0",
+        "LGPL-2.1",
+        "SSPL-1.0",
+        "BUSL-1.1",
+        "proprietary",
+        "unknown"
+      ],
+      "rationale": "Copyleft and unknown licences either infect the output or cannot be verified. Unknown is a refusal, not a benefit of the doubt."
+    },
+    {
+      "id": "licence.require_file",
+      "action": "block",
+      "value": true,
+      "rationale": "A repository without a licence file has no licence to grant. Refuse it."
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "note": "Offline search fixtures. URLs are file:// so harvest --query works with no network.",
+  "results": [
+    {
+      "title": "Retrieval-augmented generation: the practical view",
+      "url": "file:///scratch/work/ai.vrusha/examples/fixtures/pages/retrieval-augmented-generation.html",
+      "snippet": "Retrieval, fusion by rank, chunk size, and the refusal path."
+    },
+    {
+      "title": "Numeric addresses for a knowledge store",
+      "url": "file:///scratch/work/ai.vrusha/examples/fixtures/pages/numeric-addresses.html",
+      "snippet": "Domain, family, kind, cluster, position. Weighted distance. Prefixes are folders."
+    },
+    {
+      "title": "Byte-pair encoding and fertility",
+      "url": "file:///scratch/work/ai.vrusha/examples/fixtures/pages/byte-pair-encoding.html",
+      "snippet": "BPE merges, fertility per word, vocabulary size, embedding tying."
+    },
+    {
+      "title": "A ten-level rule hierarchy",
+      "url": "file:///scratch/work/ai.vrusha/examples/fixtures/pages/rules-hierarchy.html",
+      "snippet": "Level one cannot be overridden. The resolver returns the trace."
+    },
+    {
+      "title": "queue.py - bounded work queue",
+      "url": "file:///scratch/work/ai.vrusha/examples/fixtures/pages/queue.py",
+      "snippet": "Python module with a Job dataclass, BoundedQueue and drain()."
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "code": "go",
+  "name": "Go",
+  "kind": "code",
+  "family_id": 7,
+  "extensions": [
+    ".go"
+  ],
+  "comment": [
+    "//",
+    "/*"
+  ],
+  "strings": [
+    "\"",
+    "`"
+  ],
+  "indent": "tabs",
+  "chunk_strategy": "delimiter",
+  "notes": "Functions are top-level and brace-delimited; a depth-0 func is a clean unit."
+}

@@ -1,0 +1,37 @@
+{
+  "code": "bn",
+  "name": "Bengali",
+  "kind": "natural",
+  "family_id": 5,
+  "script": "Beng",
+  "direction": "ltr",
+  "sentence_end": [
+    "।",
+    ".",
+    "!",
+    "?"
+  ],
+  "stopwords": [
+    "এবং",
+    "এই",
+    "হয়",
+    "করে",
+    "থেকে",
+    "জন্য",
+    "নেই",
+    "আছে"
+  ],
+  "markers": [
+    "এবং",
+    "এই",
+    "হয়",
+    "করে",
+    "থেকে",
+    "জন্য"
+  ],
+  "grammar": {
+    "word_order": "SOV",
+    "morphology": "agglutinative with postpositions",
+    "notes": "Danda ends a sentence. Conjunct consonants make byte length a poor proxy for word count."
+  }
+}

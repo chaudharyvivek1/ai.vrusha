@@ -1,0 +1,22 @@
+{
+  "code": "python",
+  "name": "Python",
+  "kind": "code",
+  "family_id": 1,
+  "extensions": [
+    ".py",
+    ".pyi"
+  ],
+  "comment": [
+    "#"
+  ],
+  "strings": [
+    "\"\"\"",
+    "'''",
+    "\"",
+    "'"
+  ],
+  "indent": "spaces",
+  "chunk_strategy": "ast",
+  "notes": "ast gives real function and class boundaries; no heuristic needed."
+}

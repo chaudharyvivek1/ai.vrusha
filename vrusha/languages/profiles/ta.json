@@ -1,0 +1,34 @@
+{
+  "code": "ta",
+  "name": "Tamil",
+  "kind": "natural",
+  "family_id": 4,
+  "script": "Taml",
+  "direction": "ltr",
+  "sentence_end": [
+    ".",
+    "!",
+    "?"
+  ],
+  "stopwords": [
+    "மற்றும்",
+    "ஒரு",
+    "இந்த",
+    "ஆகும்",
+    "என்று",
+    "இல்லை",
+    "உள்ள"
+  ],
+  "markers": [
+    "மற்றும்",
+    "ஒரு",
+    "இந்த",
+    "ஆகும்",
+    "என்று"
+  ],
+  "grammar": {
+    "word_order": "SOV",
+    "morphology": "agglutinative — suffixes stack case, number and person onto one stem",
+    "notes": "A single Tamil word can be a whole English clause, so token counts are not comparable across languages."
+  }
+}

@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><title>Retrieval-augmented generation: the practical view</title>
+<link rel="canonical" href="https://example.org/rag"></head>
+<body>
+<nav><a href="/">Home</a> <a href="/about">About</a></nav>
+<article>
+<h1>Retrieval-augmented generation</h1>
+<p>Retrieval-augmented generation answers a question by first finding the passages that contain the answer and then writing a reply that is grounded in those passages. The retrieval half is a search problem and the generation half is a language problem, and they fail in different ways. When an answer is wrong, the first thing to check is whether retrieval returned the right passage at all.</p>
+<p>A retrieval system needs three things to work. It needs a store that keeps the original text with a citation back to the source. It needs an index that can find a passage from a paraphrase, not only from an exact keyword. And it needs a refusal path, so that when nothing relevant is found the system says so instead of inventing an answer.</p>
+<h2>Why fusion matters</h2>
+<p>Keyword search and vector search fail on different questions. A question containing a rare identifier such as a function name is answered best by keyword search, because the vector for a rare identifier is not well trained. A question that paraphrases a concept is answered best by vector search, because the words do not overlap. Fusing the two ranked lists by reciprocal rank gives both behaviours without calibrating two scores that live on different scales.</p>
+<h2>Chunk size</h2>
+<p>The chunk is the unit that gets embedded, retrieved and cited. One function per chunk, or one section per chunk, keeps a chunk about one thing. A chunk that contains two topics embeds to the average of two topics and retrieves for neither. Overlap between adjacent chunks costs a little storage and rescues the case where a unit was split at an awkward boundary.</p>
+</article>
+<footer>Example fixture page. Public domain.</footer>
+</body></html>

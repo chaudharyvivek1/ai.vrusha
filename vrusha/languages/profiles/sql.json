@@ -1,0 +1,19 @@
+{
+  "code": "sql",
+  "name": "SQL",
+  "kind": "code",
+  "family_id": 9,
+  "extensions": [
+    ".sql"
+  ],
+  "comment": [
+    "--",
+    "/*"
+  ],
+  "strings": [
+    "'"
+  ],
+  "indent": "either",
+  "chunk_strategy": "line",
+  "notes": "Statements end at a semicolon outside a string. One statement is one unit."
+}

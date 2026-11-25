@@ -1,0 +1,21 @@
+{
+  "code": "shell",
+  "name": "Shell",
+  "kind": "code",
+  "family_id": 10,
+  "extensions": [
+    ".sh",
+    ".bash",
+    ".zsh"
+  ],
+  "comment": [
+    "#"
+  ],
+  "strings": [
+    "\"",
+    "'"
+  ],
+  "indent": "either",
+  "chunk_strategy": "line",
+  "notes": "A function definition is a unit; the rest of a script is a sequence of commands."
+}

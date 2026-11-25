@@ -1,0 +1,37 @@
+{
+  "level": 9,
+  "name": "training",
+  "description": "Level 9: training. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "training.dedupe_before",
+      "action": "set",
+      "value": true,
+      "rationale": "Duplicate shingles inflate loss improvement without teaching anything. Deduplicate before sharding."
+    },
+    {
+      "id": "training.val_fraction",
+      "action": "set",
+      "value": 0.02,
+      "rationale": "A held-out slice, taken by hash of document id so it is stable across runs."
+    },
+    {
+      "id": "training.tokens_per_param",
+      "action": "set",
+      "value": 20,
+      "rationale": "Chinchilla ratio. Below 20 tokens per parameter the model is undertrained, not small."
+    },
+    {
+      "id": "training.seq_len",
+      "action": "set",
+      "value": 256,
+      "rationale": "Context length for the first rung. Raising it multiplies attention cost quadratically."
+    },
+    {
+      "id": "training.checkpoint_keep",
+      "action": "set",
+      "value": 2,
+      "rationale": "Keep the last two. A checkpoint that will not load is worth nothing; the previous one is worth everything."
+    }
+  ]
+}

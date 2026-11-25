@@ -1,0 +1,31 @@
+{
+  "level": 5,
+  "name": "structure",
+  "description": "Level 5: structure. Lower level numbers win.",
+  "rules": [
+    {
+      "id": "address.segments",
+      "action": "set",
+      "value": 5,
+      "rationale": "domain.family.kind.cluster.ordinal. Changing this is a schema change and breaks every stored address."
+    },
+    {
+      "id": "address.weights",
+      "action": "set",
+      "value": [
+        8.0,
+        4.0,
+        2.0,
+        1.0,
+        0.5
+      ],
+      "rationale": "Coarse segments must dominate the distance, or 'far apart' stops meaning 'different'."
+    },
+    {
+      "id": "address.prefix_is_folder",
+      "action": "set",
+      "value": true,
+      "rationale": "A prefix of an address is a real folder: everything under 0.5 is function material. This is what makes browsing possible."
+    }
+  ]
+}

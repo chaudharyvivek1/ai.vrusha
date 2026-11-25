@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vrusha"
+version = "0.1.0"
+description = "Vrusha: harvest the web, file it into an addressed store, train a small model on it."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Vivek Chaudhary" }]
+keywords = ["rag", "harvest", "llm", "tokenizer", "sqlite"]
+
+# Nothing here is mandatory beyond the standard library and numpy.
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+# Real BPE trainer. Without it the pure-python fallback is used.
+fast = ["tokenizers>=0.15"]
+# Training and generation. Without it everything except `train`/`generate` works.
+train = ["torch>=2.0"]
+# In-process embeddings instead of the hash backend.
+embed = ["sentence-transformers>=2.2"]
+all = ["tokenizers>=0.15", "torch>=2.0", "sentence-transformers>=2.2"]
+
+[project.scripts]
+vrusha = "vrusha.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["vrusha*"]
+
+[tool.setuptools.package-data]
+vrusha = ["rules/levels/**/*.json", "languages/profiles/*.json"]

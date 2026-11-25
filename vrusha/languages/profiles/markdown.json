@@ -1,0 +1,19 @@
+{
+  "code": "markdown",
+  "name": "Markdown",
+  "kind": "code",
+  "family_id": 15,
+  "extensions": [
+    ".md",
+    ".markdown"
+  ],
+  "comment": [
+    "<!--"
+  ],
+  "strings": [
+    "`"
+  ],
+  "indent": "either",
+  "chunk_strategy": "paragraph",
+  "notes": "Headings define sections; the paragraph chunker already splits on them."
+}
