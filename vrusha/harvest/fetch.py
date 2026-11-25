@@ -32,7 +32,7 @@ import zlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from html.parser import HTMLParser
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 from urllib.parse import urlsplit
 
 from .charset import CharsetResult, decode, detect_charset, replacement_ratio
@@ -44,8 +44,10 @@ from .net import (
     ResponseTooLarge,
     UnsafeDestination,
     build_opener,
+    canonical_host,
     check_scheme,
     decompress_capped,
+    format_host,
     resolve_safe,
 )
 
@@ -127,12 +129,18 @@ class Document:
 
 
 def host_of(url: str) -> str:
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme in ("http", "https") and parsed.netloc:
-        return parsed.netloc.lower().split(":")[0]
-    if url.startswith("file://"):
+    """Best-effort hostname for display and statistics.
+
+    Never raises: this is used for document metadata and for grouping. The
+    security-relevant path uses `canonical_host`, which does raise, because a
+    check that silently returns "" is a check that silently passes.
+    """
+    if (url or "").startswith("file://"):
         return "local"
-    return ""
+    try:
+        return canonical_host(url)
+    except UnsafeDestination:
+        return ""
 
 
 _SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
@@ -275,11 +283,12 @@ class RobotsGate:
         self.opener = opener
         self._cache: Dict[str, Optional[urllib.robotparser.RobotFileParser]] = {}
 
-    def _parser(self, scheme: str, host: str):
-        if host in self._cache:
-            return self._cache[host]
+    def _parser(self, scheme: str, authority: str):
+        """`authority` is host plus optional port, already bracketed for IPv6."""
+        if authority in self._cache:
+            return self._cache[authority]
         parser = urllib.robotparser.RobotFileParser()
-        url = f"{scheme}://{host}/robots.txt"
+        url = f"{scheme}://{authority}/robots.txt"
         try:
             request = urllib.request.Request(url, headers={"User-Agent": self.user_agent})
             if self.opener is not None:
@@ -289,18 +298,18 @@ class RobotsGate:
                 with urllib.request.urlopen(request, timeout=self.timeout) as response:
                     body = response.read(200_000).decode("utf-8", errors="ignore")
             parser.parse(body.splitlines())
-            self._cache[host] = parser
+            self._cache[authority] = parser
         except urllib.error.HTTPError as exc:
             if exc.code in (401, 403):
-                self._cache[host] = None          # exists but forbids us
+                self._cache[authority] = None     # exists but forbids us
             elif 400 <= exc.code < 500:
                 parser.parse([])                  # no robots.txt: everything allowed
-                self._cache[host] = parser
+                self._cache[authority] = parser
             else:
-                self._cache[host] = None          # 5xx: do not hammer, fail closed
+                self._cache[authority] = None     # 5xx: do not hammer, fail closed
         except Exception:
-            self._cache[host] = None              # network trouble: fail closed
-        return self._cache[host]
+            self._cache[authority] = None         # network trouble: fail closed
+        return self._cache[authority]
 
     def allowed(self, url: str) -> tuple[bool, str]:
         if not self.respect:
@@ -308,7 +317,17 @@ class RobotsGate:
         parsed = urllib.parse.urlparse(url)
         if parsed.scheme not in ("http", "https"):
             return True, "not an http url"
-        parser = self._parser(parsed.scheme, parsed.netloc)
+        # The robots request must go to the same host the page request will,
+        # built from the canonical hostname -- not from the raw netloc, which
+        # still carries any userinfo and is where an IPv6 literal loses its
+        # brackets.
+        try:
+            host = canonical_host(url)
+            port = parsed.port
+        except UnsafeDestination as exc:
+            return False, str(exc)
+        authority = format_host(host) + (f":{port}" if port else "")
+        parser = self._parser(parsed.scheme, authority)
         if parser is None:
             return False, "robots.txt unreadable or forbidding; treating as disallowed"
         if parser.can_fetch(self.user_agent, url):
@@ -323,7 +342,8 @@ class RobotsGate:
 class Fetcher:
     """One instance per run: shares the rate limiter and the robots cache."""
 
-    def __init__(self, cfg: dict, allow_private: bool = False):
+    def __init__(self, cfg: dict, allow_private: bool = False,
+                 allow_hosts: Iterable[str] = ()):
         http = cfg["http"]
         self.cfg = cfg
         self.user_agent = http["user_agent"]
@@ -332,11 +352,15 @@ class Fetcher:
         self.max_compressed = int(http.get("max_compressed_bytes", self.max_bytes))
         self.max_decompressed = int(http.get("max_decompressed_bytes", 20_000_000))
         self.max_redirects = int(http.get("max_redirects", 5))
-        #: Loopback and private destinations are refused. Tests set this to
-        #: reach a local server; nothing in the CLI sets it.
+        #: Loopback and private destinations are refused.
+        #: `allow_hosts` is the narrow exception: named hosts only, which is
+        #: what a loopback test needs. `allow_private` opens the whole address
+        #: class and exists only for a deliberately hostile test.
         self.allow_private = bool(allow_private or http.get("allow_private", False))
+        self.allow_hosts = frozenset(str(h).strip("[]").lower() for h in (allow_hosts or ()))
         self.limiter = RateLimiter(float(http.get("rate_per_host", 1.0)))
-        self.opener = build_opener(allow_private=self.allow_private)
+        self.opener = build_opener(allow_private=self.allow_private,
+                                   allow_hosts=self.allow_hosts)
         self.robots = RobotsGate(self.user_agent, self.timeout,
                                  bool(http.get("respect_robots", True)),
                                  opener=self.opener)
@@ -403,15 +427,19 @@ class Fetcher:
                     "when they are the requested source, never as a destination")
             return
 
-        host = host_of(url)
+        # `canonical_host` raises on credentials, a missing host, a bad port or
+        # a hostname that is not valid IDNA. Every one of those is a URL that
+        # cannot be safely compared against a permitted host.
+        host = canonical_host(url)
         # Policy before network: leaving the permitted host needs no DNS lookup
         # to detect, and asking for one would leak the hostname of a page we
         # are about to refuse.
-        if allowed_host and host != allowed_host:
+        if allowed_host and host != allowed_host.lower():
             raise RedirectError(f"{url} leaves the permitted host {allowed_host!r}")
 
         port = urlsplit(url).port or (443 if scheme == "https" else 80)
-        resolve_safe(host, port, allow_private=self.allow_private)
+        resolve_safe(host, port, allow_private=self.allow_private,
+                     allow_hosts=self.allow_hosts)
 
         allowed, why = self.robots.allowed(url)
         if not allowed:

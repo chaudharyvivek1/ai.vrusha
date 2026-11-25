@@ -173,6 +173,55 @@ line in the config. [docs/PASSES.md](docs/PASSES.md).
 
 ---
 
+## Network safety
+
+The harvester follows URLs that strangers wrote, so every one is treated as
+hostile until checked.
+
+**Authority parsing.** The hostname comes from `urlsplit().hostname`, which
+strips the port, removes userinfo, drops the brackets from an IPv6 literal and
+lowercases. A URL carrying `user:pass@` is refused outright: credentials let one
+host be written to look like another, which is exactly how a domain restriction
+is bypassed. Internationalised hostnames are normalised to IDNA so two spellings
+of the same host compare equal.
+
+**Redirects are followed by hand**, one hop at a time, and every hop is checked
+before a socket opens: scheme, permitted host, resolved address, robots.txt —
+in that order, because fetching robots.txt is itself a request to the host.
+
+**Destinations are validated, not hostnames.** The name is resolved and the
+*address* is checked: loopback, private, link-local, multicast, reserved and
+unspecified are refused. `169.254.169.254` is the cloud metadata service, and it
+is the reason this check exists. The connection is then pinned to the validated
+address, so a second DNS answer cannot move it, and TLS still verifies the
+certificate against the hostname.
+
+**Bodies are bounded twice** — once on the wire, once on what they may expand
+to, with the second limit enforced *during* decompression rather than after.
+
+### Compression actually supported
+
+| `Content-Encoding` | supported |
+|---|---|
+| `gzip`, `x-gzip` | yes, including **concatenated members** under one cumulative output limit |
+| `deflate` | yes, both zlib-wrapped (the spec) and raw (what servers actually send) |
+| `br`, `zstd` | refused with `DecompressionError`, never silently mis-decoded |
+| none / `identity` | yes |
+
+Malformed, truncated and over-limit bodies raise typed errors. A trailing-NUL
+pad after the last gzip member is accepted, because the format allows it;
+anything else after the last member is refused.
+
+### Test isolation
+
+The suite needs no network. Network tests start a `ThreadingHTTPServer` on
+`127.0.0.1` inside the test process and give the fetcher `allow_hosts={"127.0.0.1"}`
+— a **name allow-list**, not the `allow_private` address-class switch. Private,
+link-local and metadata ranges stay blocked in every test, and the blocked-path
+tests assert on a socket-level spy that the forbidden address received **zero
+connection attempts**. No test contacts a public website or a cloud metadata
+endpoint.
+
 ## Commands
 
 | command | what it does |
@@ -218,7 +267,7 @@ offline, and how you replay a search that mattered.
 
 ## Status
 
-**Working, tested.** 211 tests, no network, no GPU.
+**Working, tested.** 249 tests, no network, no GPU.
 
 - addresses: parse, prefix, distance, float form, round-trip
 - the ten-level rule resolver, with trace and `--check`
@@ -230,7 +279,8 @@ offline, and how you replay a search that mattered.
 - retrieval: BM25 + vector + address proximity, fused by rank
 - extractive answers with citations, and a real refusal path
 - tokenizers: HF byte-level BPE, plus a pure-python fallback
-- shards, split by hash of chunk id, uint16
+- shards, split by **document id** so no document leaks across train/val, with
+  `uint16`/`uint32` chosen automatically and the choice recorded in `meta.json`
 - TinyLM: forward, causal mask, RoPE, generation, training, checkpoints
 
 **Working, but small.** The default embedder is deterministic feature hashing,
@@ -288,7 +338,7 @@ vrusha/
 docs/             ARCHITECTURE, ADDRESS, RULES, PASSES, OPERATIONS, MODEL
 examples/         fixtures: a local "web" the tests harvest
 scripts/          gen_rules.py, gen_languages.py, smoke_test.sh
-tests/            211 tests, including one per audit finding
+tests/            249 tests, including one per audit finding
 ```
 
 ---

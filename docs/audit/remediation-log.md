@@ -23,6 +23,10 @@ Baseline: `23958be`. Reproduce anything here with `python docs/audit/repro_phase
 | E3 | dataset config unvalidated | **fixed** | 4 |
 | N2 | robots.txt fetched before the address check | **fixed** | 4 |
 | N3 | a redirect could target `file://` and read local files | **fixed** | 4 |
+| V4-01 | URL authority parsed with a regex over the netloc | **fixed** | 5 |
+| V4-02 | the deflate fallback was dead code | **fixed** | 5 |
+| V4-03 | only the first gzip member was decompressed | **fixed** | 5 |
+| V4-04 | tests opened every private address class | **fixed** | 5 |
 
 ---
 
@@ -255,6 +259,75 @@ instead of a different dtype than they asked for.
 
 ---
 
+## Wave 5 — URL authority, compression and test isolation
+
+### V4-01 · the hostname came from a regex over the netloc
+
+**Was.** `host_of` did `urlparse(url).netloc.lower().split(":")[0]`. That is
+wrong in four ways at once: it keeps userinfo (`http://allowed.com@evil.com/`
+becomes `allowed.com@evil.com`, which is neither host in the URL), it breaks an
+IPv6 literal (`http://[::1]:80/` becomes `[`), it keeps the brackets, and it
+does no IDNA normalisation. Every comparison against a permitted host was
+therefore comparing against a string that is not a host.
+
+**Now.** `canonical_host` uses `urlsplit().hostname` and then refuses what
+should never have been accepted: credentials in the URL, a missing host, a
+malformed port, a non-ASCII name that is not valid IDNA. The permitted-host
+check, the address check and the robots fetch all use that one function, and
+the robots URL is rebuilt from it with `format_host` so an IPv6 authority is
+bracketed exactly once.
+
+**Found while fixing it:** `format_host` was bracketing a `host:port` authority
+into `[host:port]`, which broke every robots fetch that used a non-default
+port. The Wave 4 suite caught it immediately.
+
+### V4-02 · the deflate fallback never ran
+
+**Was.**
+
+```python
+for candidate in (zlib.MAX_WBITS, -zlib.MAX_WBITS):
+    try:
+        return _inflate(raw, candidate, limit)
+    except zlib.error:
+        continue
+```
+
+`_inflate` converts `zlib.error` into `DecompressionError`, so `except
+zlib.error` could never fire: the second candidate was never tried and raw
+deflate — which is what many servers actually send — always failed.
+
+**Now.** Both formats are tried, both errors are kept and reported, and
+`ResponseTooLarge` is re-raised immediately instead of being treated as a
+format mismatch. A limit that fires is a limit, not a reason to try again.
+
+### V4-03 · only the first gzip member was decompressed
+
+**Was.** `zlib.decompressobj` stops at the end of the first member and leaves
+the rest in `unused_data`, which was ignored. A two-member body silently lost
+everything after the first.
+
+**Now.** `gunzip_members` walks every member under **one cumulative** output
+limit, so a body of many small members cannot exceed the ceiling by adding
+them up. Trailing NUL padding is accepted (the format allows it); any other
+trailing data, or a corrupt later member, raises.
+
+### V4-04 · tests opened the whole private address class
+
+**Was.** The Wave 4 tests reached their loopback server with
+`allow_private=True`, which disables the address guard for *every* private
+range. A test that disables the control it is testing proves less than it
+looks like it proves.
+
+**Now.** `Fetcher(..., allow_hosts={"127.0.0.1"})` — a name allow-list. Naming
+one host does not open `127.0.0.2`, `10.0.0.0/8` or `169.254.169.254`, and that
+is asserted directly. The blocked-path tests run against a socket-level spy and
+assert the forbidden address received **zero connection attempts**, with a
+control test proving the spy fires for a permitted connection. One test greps
+the suite itself to keep `allow_private=True` from coming back.
+
+---
+
 ## Still open
 
 Nothing from the Phase 1 audit. Three items were found during Wave 4 and fixed
@@ -277,6 +350,7 @@ in the same branch (N1, N2, N3). The remaining risks are not defects:
 | 2–3 | `tests/test_regressions_wave23.py` | 24 |
 | 4 | `tests/test_wave4_network.py` | 52 |
 | 4 | `tests/test_wave4_dataset.py` | 38 |
-| **total** | | **211** |
+| 5 | `tests/test_wave5_network.py` | 38 |
+| **total** | | **249** |
 
 Each regression test fails against `23958be` for the defect it names.

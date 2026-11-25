@@ -1,9 +1,12 @@
 """Wave 4 network tests: redirects, SSRF, decompression bombs, charset.
 
 Everything here runs against a server on 127.0.0.1 started inside the test, so
-the suite needs no network and no public site. The private-address guard is
-tested separately from the fetcher, because the fetcher is deliberately given
-`allow_private=True` to be able to reach the loopback server at all.
+the suite needs no network and no public site.
+
+The fetcher is given `allow_hosts={"127.0.0.1"}` -- a name allow-list, not the
+`allow_private` address-class switch. Private, link-local and metadata ranges
+stay blocked in every test that uses it, which is asserted directly in
+`test_wave5_network.py`.
 """
 import gzip
 import http.server
@@ -159,7 +162,12 @@ def cfg_for(**http_overrides):
 
 
 def fetcher(**overrides):
-    return Fetcher(cfg_for(**overrides), allow_private=True)
+    """A fetcher that may reach exactly one host: the loopback test server.
+
+    `allow_hosts` is a name allow-list, not an address-class switch, so
+    169.254.169.254 and 10.0.0.0/8 stay blocked in every test that uses it.
+    """
+    return Fetcher(cfg_for(**overrides), allow_hosts={"127.0.0.1"})
 
 
 # ---------------------------------------------------------------------------
@@ -203,9 +211,14 @@ def test_j1_unresolvable_host_is_refused():
         resolve_safe("no-such-host.invalid", 80)
 
 
-def test_j1_allow_private_is_opt_in():
-    family, sockaddr = resolve_safe("127.0.0.1", 8080, allow_private=True)
+def test_j1_a_named_host_is_the_narrow_exception():
+    family, sockaddr = resolve_safe("127.0.0.1", 8080, allow_hosts={"127.0.0.1"})
     assert sockaddr[0] == "127.0.0.1"
+    # naming one host does not open the address class
+    with pytest.raises(UnsafeDestination):
+        resolve_safe("127.0.0.2", 8080, allow_hosts={"127.0.0.1"})
+    with pytest.raises(UnsafeDestination):
+        resolve_safe("169.254.169.254", 80, allow_hosts={"127.0.0.1"})
 
 
 def test_j1_only_expected_schemes():
@@ -254,6 +267,7 @@ def test_j1_redirect_to_cloud_metadata_is_refused(server):
     doc = fetcher().get(f"{server}/redir-metadata")
     assert not doc.ok
     assert "UnsafeDestination" in doc.error
+    assert "link-local" in doc.error
 
 
 def test_j1_metadata_address_is_refused_before_any_request():

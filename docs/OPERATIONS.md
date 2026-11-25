@@ -75,9 +75,16 @@ A fetch can fail in ways you should be able to tell apart:
 | `RedirectError: redirect loop` | the chain came back to a URL it had already visited |
 | `ResponseTooLarge` | the body, compressed or decompressed, exceeded its ceiling |
 | `DecompressionError` | the gzip/deflate stream was malformed, truncated, or an encoding we do not support |
+| `UnsafeDestination: credentials in a URL are refused` | the URL carried `user:pass@`, which is how one host is made to look like another |
 
 None of these is a reason to raise the limit. A body that expands 1000× is
 either a mistake or an attack, and both want the same answer.
+
+Compression support is deliberately narrow: `gzip` (including several members
+back to back, under one cumulative limit) and `deflate` (both zlib-wrapped and
+raw). `br` and `zstd` are refused rather than guessed at. If a site only offers
+brotli, the request already asks for `gzip, deflate`; a server that ignores
+`Accept-Encoding` and sends `br` anyway is misconfigured, and the error says so.
 
 If a site you legitimately want is refused, the fix is `policy.refused_domains`
 in reverse — check that the URL is public and that robots.txt allows it — not a

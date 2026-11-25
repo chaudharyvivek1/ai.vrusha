@@ -114,7 +114,57 @@ def is_safe_address(value: str) -> Tuple[bool, str]:
     return (reason is None), (reason or "public")
 
 
-def resolve_safe(host: str, port: Optional[int], allow_private: bool = False
+def canonical_host(url: str) -> str:
+    """The hostname a URL actually connects to.
+
+    `urlsplit().hostname` is the only correct source. It strips the port, drops
+    the brackets from an IPv6 literal, removes userinfo and lowercases. A regex
+    over the netloc gets all four wrong: `http://[::1]:80/` comes out as `[`,
+    and `http://allowed.com@evil.com/` comes out as `allowed.com@evil.com`,
+    which is neither of the two hosts in the URL -- so a domain restriction
+    compared against it is comparing against nothing.
+
+    Credentials are refused outright. A URL carrying `user:pass@` is either a
+    mistake or an attempt to make one host look like another, and neither is
+    worth guessing about.
+    """
+    try:
+        parts = urlsplit(url)
+    except ValueError as exc:
+        raise UnsafeDestination(f"cannot parse {url!r}: {exc}") from exc
+    if parts.scheme.lower() not in ALLOWED_SCHEMES:
+        raise UnsafeDestination(f"scheme {parts.scheme!r} is not allowed")
+    if parts.username is not None or parts.password is not None:
+        raise UnsafeDestination(
+            "credentials in a URL are refused: they let one host be written to "
+            "look like another")
+    try:
+        parts.port                     # raises ValueError on a malformed port
+    except ValueError as exc:
+        raise UnsafeDestination(f"{url!r} has an invalid port: {exc}") from exc
+    host = parts.hostname
+    if not host:
+        raise UnsafeDestination(f"{url!r} has no host")
+    if host.isascii():
+        return host.lower()
+    try:
+        return host.encode("idna").decode("ascii").lower()
+    except (UnicodeError, UnicodeDecodeError) as exc:
+        raise UnsafeDestination(
+            f"{url!r} has a hostname that is not valid IDNA: {exc}") from exc
+
+
+def format_host(host: str) -> str:
+    """Bracket an IPv6 literal so it can be put back into a URL."""
+    return f"[{host}]" if ":" in host else host
+
+
+def _permitted_hosts(allow_hosts: Iterable[str]) -> frozenset:
+    return frozenset(str(h).strip().strip("[]").lower() for h in (allow_hosts or ()))
+
+
+def resolve_safe(host: str, port: Optional[int], allow_private: bool = False,
+                 allow_hosts: Iterable[str] = ()
                  ) -> Tuple[int, tuple]:
     """Resolve a host and return one validated `(family, sockaddr)` to connect to.
 
@@ -128,6 +178,10 @@ def resolve_safe(host: str, port: Optional[int], allow_private: bool = False
     if not host:
         raise UnsafeDestination("empty host")
 
+    # `allow_hosts` is the narrow exception tests use to reach a loopback
+    # server: one named host, not a whole address class.
+    permitted = allow_private or host.lower() in _permitted_hosts(allow_hosts)
+
     # a literal IP needs no resolution, but the same check applies
     try:
         literal = ipaddress.ip_address(host)
@@ -136,7 +190,7 @@ def resolve_safe(host: str, port: Optional[int], allow_private: bool = False
 
     if literal is not None:
         reason = _reject_reason(literal)
-        if reason and not allow_private:
+        if reason and not permitted:
             raise UnsafeDestination(f"{host} is a {reason} address")
         family = socket.AF_INET6 if literal.version == 6 else socket.AF_INET
         sockaddr = ((str(literal), port or 0, 0, 0) if literal.version == 6
@@ -157,7 +211,7 @@ def resolve_safe(host: str, port: Optional[int], allow_private: bool = False
         except ValueError:
             continue
         reason = _reject_reason(addr)
-        if reason and not allow_private:
+        if reason and not permitted:
             raise UnsafeDestination(
                 f"{host} resolves to {sockaddr[0]}, a {reason} address")
         if chosen is None:
@@ -242,10 +296,12 @@ class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
 
 
 def build_opener(allow_private: bool = False,
+                 allow_hosts: Iterable[str] = (),
                  context: Optional[ssl.SSLContext] = None) -> urllib.request.OpenerDirector:
     """An opener that pins connections and never follows a redirect by itself."""
     def resolver(host, port):
-        return resolve_safe(host, port, allow_private=allow_private)
+        return resolve_safe(host, port, allow_private=allow_private,
+                            allow_hosts=allow_hosts)
 
     context = context or ssl.create_default_context()
     return urllib.request.build_opener(
@@ -329,6 +385,116 @@ def _inflate(raw: bytes, wbits: int, limit: int) -> bytes:
     if not engine.eof:
         raise DecompressionError("compressed body ended before the stream did")
     return bytes(out)
+
+
+def decompress_capped(raw: bytes, encoding: str,
+                      limit: int = DEFAULT_MAX_DECOMPRESSED) -> bytes:
+    """Decompress `raw`, refusing to produce more than `limit` bytes.
+
+    The cap is enforced *during* decompression, not after: `zlib` is given a
+    `max_length` on every call, so a 1 KB body that expands to 1 GB allocates
+    at most `limit` bytes before this raises. Checking the size afterwards
+    would mean allocating the bomb first, which is the attack.
+    """
+    encoding = (encoding or "").strip().lower()
+    if encoding in ("", "identity"):
+        if len(raw) > limit:
+            raise ResponseTooLarge(
+                f"body is {len(raw)} bytes, above the {limit}-byte limit")
+        return raw
+
+    if encoding in ("gzip", "x-gzip"):
+        return gunzip_members(raw, limit)[0]
+
+    if encoding == "deflate":
+        # 'deflate' is zlib-wrapped by the spec and raw-deflate in the wild,
+        # and the two are not distinguishable from the bytes alone. Try both,
+        # keep both errors, and never let a size limit be mistaken for a
+        # format mismatch: a limit that fires is a limit, not a retry.
+        errors = []
+        for wbits, name in ((zlib.MAX_WBITS, "zlib-wrapped"),
+                            (-zlib.MAX_WBITS, "raw-deflate")):
+            out = bytearray()
+            try:
+                _inflate_into(raw, wbits, limit, out)
+            except ResponseTooLarge:
+                raise
+            except DecompressionError as exc:
+                errors.append(f"{name}: {exc}")
+                continue
+            return bytes(out)
+        raise DecompressionError(
+            "deflate body is neither valid zlib-wrapped nor valid raw-deflate ("
+            + "; ".join(errors) + ")")
+
+    if encoding in ("br", "zstd"):
+        raise DecompressionError(
+            f"content-encoding {encoding!r} is not supported; ask for gzip")
+    raise DecompressionError(f"unknown content-encoding {encoding!r}")
+
+
+def gunzip_members(raw: bytes, limit: int = DEFAULT_MAX_DECOMPRESSED
+                   ) -> Tuple[bytes, int]:
+    """Decompress every concatenated gzip member under one cumulative limit.
+
+    A gzip file may be several members back to back, and `decompressobj` stops
+    at the end of the first one, leaving the rest in `unused_data`. Ignoring
+    that silently truncates the body. Trailing NUL padding is legal; anything
+    else after the last member is not a member and is refused.
+    """
+    if not raw:
+        raise DecompressionError("empty gzip body")
+    out = bytearray()
+    data = raw
+    members = 0
+    while data:
+        if members and not data.startswith(b"\x1f\x8b"):
+            if not data.strip(b"\x00"):
+                break                       # legal trailing padding
+            raise DecompressionError(
+                f"trailing data after gzip member {members} is not a gzip member")
+        unused = _inflate_into(data, 16 + zlib.MAX_WBITS, limit, out)
+        members += 1
+        if unused == data:
+            raise DecompressionError("gzip member made no progress")
+        data = unused
+    if members == 0:
+        raise DecompressionError("no gzip member found")
+    return bytes(out), members
+
+
+def _inflate_into(raw: bytes, wbits: int, limit: int, out: bytearray) -> bytes:
+    """Inflate one stream into `out`, capped. Returns the unused tail."""
+    try:
+        engine = zlib.decompressobj(wbits)
+    except zlib.error as exc:                     # pragma: no cover - defensive
+        raise DecompressionError(f"cannot start decompression: {exc}") from exc
+
+    view = memoryview(raw)
+    for start in range(0, len(view), _CHUNK):
+        chunk = bytes(view[start:start + _CHUNK])
+        while chunk:
+            room = limit - len(out) + 1           # +1 so we can detect overflow
+            try:
+                out += engine.decompress(chunk, room)
+            except zlib.error as exc:
+                raise DecompressionError(f"malformed compressed body: {exc}") from exc
+            if len(out) > limit:
+                raise ResponseTooLarge(
+                    f"decompressed body exceeds the {limit}-byte limit "
+                    f"(refused during decompression, not after)")
+            chunk = engine.unconsumed_tail
+            if not chunk:
+                break
+    try:
+        out += engine.flush()
+    except zlib.error as exc:
+        raise DecompressionError(f"truncated compressed body: {exc}") from exc
+    if len(out) > limit:
+        raise ResponseTooLarge(f"decompressed body exceeds the {limit}-byte limit")
+    if not engine.eof:
+        raise DecompressionError("compressed body ended before the stream did")
+    return engine.unused_data
 
 
 # ---------------------------------------------------------------------------

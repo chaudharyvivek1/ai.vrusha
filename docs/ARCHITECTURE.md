@@ -62,6 +62,10 @@ the 3xx, and `_get_checked` walks the chain one hop at a time. Every hop passes
 
 1. **scheme** — `http`, `https`, and `file` only for the first hop. A remote
    page must never be able to redirect the harvester into reading a local file.
+   The hostname comes from `urlsplit().hostname`, never from the raw netloc:
+   the netloc still carries userinfo and keeps an IPv6 literal's brackets, so a
+   regex over it produces a host that matches neither of the two hosts in the
+   URL. Credentials in a URL are refused outright.
 2. **permitted host** — checked before any DNS lookup, so a refused page's
    hostname is not even resolved.
 3. **address** — the hostname is resolved and the *address* is validated.
@@ -82,6 +86,13 @@ the decompressed body is capped *during* decompression: `zlib.decompressobj` is
 given a `max_length` on every call, so a 40 KB gzip that expands to 40 MB
 raises before the 40 MB is allocated. Checking the size afterwards would mean
 allocating the bomb first, which is the attack.
+
+A gzip body may be several members back to back. `decompressobj` stops at the
+end of the first and leaves the rest in `unused_data`, so the members are walked
+explicitly under one cumulative output limit — otherwise a body made of many
+small members would be unbounded however small the limit looked. `deflate` is
+tried both zlib-wrapped and raw, because both are in the wild, and a size limit
+that fires is never retried as the other format.
 
 **Encoding is decided once and recorded.** BOM, then HTTP header, then
 `<meta charset>`, then strict UTF-8, then a guess, then a flagged fallback. The
