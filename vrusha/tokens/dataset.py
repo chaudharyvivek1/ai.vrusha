@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 from dataclasses import dataclass
 from typing import Iterable, List, Optional, Sequence, Tuple
@@ -76,6 +77,46 @@ def corpus_from_store(store: Store, min_chars: int = 80,
     ]
 
 
+class DatasetConfigError(ValueError):
+    """A dataset build that cannot be run as asked, named clearly.
+
+    Raised before any file is written, so a bad configuration leaves no
+    half-built shard directory behind.
+    """
+
+
+DTYPES = {"uint16": 65_536, "uint32": 4_294_967_296}
+
+
+def validate_build_args(shard_tokens: int, val_fraction: float, dtype: str,
+                        vocab_size: int) -> None:
+    """Everything that must be true before a single byte is written."""
+    if isinstance(shard_tokens, bool) or not isinstance(shard_tokens, int):
+        raise DatasetConfigError(f"shard_tokens must be an integer, got {shard_tokens!r}")
+    if shard_tokens <= 0:
+        raise DatasetConfigError(
+            f"shard_tokens must be positive, got {shard_tokens}; a shard of zero "
+            f"tokens would either write nothing or loop forever")
+    if not isinstance(val_fraction, (int, float)) or isinstance(val_fraction, bool):
+        raise DatasetConfigError(f"val_fraction must be a number, got {val_fraction!r}")
+    if not math.isfinite(float(val_fraction)):
+        raise DatasetConfigError(f"val_fraction must be finite, got {val_fraction!r}")
+    if not 0.0 <= float(val_fraction) < 1.0:
+        raise DatasetConfigError(
+            f"val_fraction must be in [0, 1), got {val_fraction}; 1.0 would leave "
+            f"no training data at all")
+    if dtype not in DTYPES:
+        raise DatasetConfigError(
+            f"dtype must be one of {sorted(DTYPES)}, got {dtype!r}")
+    if isinstance(vocab_size, bool) or not isinstance(vocab_size, int) or vocab_size <= 0:
+        raise DatasetConfigError(f"vocab_size must be a positive integer, got {vocab_size!r}")
+    limit = DTYPES[dtype]
+    if vocab_size > limit:
+        raise DatasetConfigError(
+            f"vocabulary of {vocab_size:,} does not fit in {dtype} (max id {limit - 1:,}); "
+            f"use dtype='uint32'")
+
+
 def _is_validation(split_key: int, fraction: float) -> bool:
     """Stable by key: the same key is always on the same side.
 
@@ -96,14 +137,24 @@ def build_dataset(
     *,
     shard_tokens: int = 2_000_000,
     val_fraction: float = 0.02,
-    dtype: str = "uint16",
+    dtype: Optional[str] = None,
     tokenizer_path: str = "",
     verbose: bool = False,
 ) -> dict:
-    """Tokenise, split, shard. Returns the manifest, also written to meta.json."""
-    os.makedirs(out_dir, exist_ok=True)
-    if tokenizer.vocab_size >= 65_536 and dtype == "uint16":
-        dtype = "uint32"
+    """Tokenise, split, shard. Returns the manifest, also written to meta.json.
+
+    Every argument is validated before the output directory is created, so an
+    impossible configuration raises `DatasetConfigError` and leaves the disk
+    untouched.
+
+    `dtype=None` (or "auto") picks uint16 when the vocabulary fits and uint32
+    when it does not, and the manifest records what was chosen. An explicit
+    dtype is honoured strictly: asking for uint16 with a 70,000-token
+    vocabulary is a contradiction, not something to quietly override.
+    """
+    if dtype is None or str(dtype).lower() == "auto":
+        dtype = "uint32" if tokenizer.vocab_size >= DTYPES["uint16"] else "uint16"
+    validate_build_args(shard_tokens, val_fraction, dtype, tokenizer.vocab_size)
     np_dtype = np.uint16 if dtype == "uint16" else np.uint32
 
     streams: dict[str, List[int]] = {"train": [], "val": []}
@@ -121,6 +172,14 @@ def build_dataset(
     # number is recorded so a future change to the split has to face it.
     leaked = documents["train"] & documents["val"]
 
+    limit = DTYPES[dtype]
+    for split, ids in streams.items():
+        if ids and max(ids) >= limit:
+            raise DatasetConfigError(
+                f"token id {max(ids)} does not fit in {dtype} (max {limit - 1}); "
+                f"the tokenizer and the dtype disagree")
+
+    os.makedirs(out_dir, exist_ok=True)
     shards: List[dict] = []
     total = 0
     for split, ids in streams.items():

@@ -218,7 +218,7 @@ offline, and how you replay a search that mattered.
 
 ## Status
 
-**Working, tested.** 121 tests, no network, no GPU.
+**Working, tested.** 211 tests, no network, no GPU.
 
 - addresses: parse, prefix, distance, float form, round-trip
 - the ten-level rule resolver, with trace and `--check`
@@ -288,7 +288,7 @@ vrusha/
 docs/             ARCHITECTURE, ADDRESS, RULES, PASSES, OPERATIONS, MODEL
 examples/         fixtures: a local "web" the tests harvest
 scripts/          gen_rules.py, gen_languages.py, smoke_test.sh
-tests/            121 tests, including one per audit finding
+tests/            211 tests, including one per audit finding
 ```
 
 ---

@@ -33,6 +33,21 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from typing import Dict, List, Optional
+from urllib.parse import urlsplit
+
+from .charset import CharsetResult, decode, detect_charset, replacement_ratio
+from .net import (
+    REDIRECT_CODES,
+    DecompressionError,
+    NetworkError,
+    RedirectError,
+    ResponseTooLarge,
+    UnsafeDestination,
+    build_opener,
+    check_scheme,
+    decompress_capped,
+    resolve_safe,
+)
 
 # Tags whose text is never content.
 SKIP_TAGS = {
@@ -70,6 +85,12 @@ class Document:
     lang: str = "en"
     links: List[str] = field(default_factory=list)
     error: str = ""
+    #: How the bytes were decoded, and how sure we are. Recorded in the
+    #: manifest so a mis-decode is visible after the fact.
+    encoding: str = ""
+    encoding_source: str = ""
+    encoding_confidence: float = 0.0
+    encoding_lossy: bool = False
 
     def __post_init__(self) -> None:
         if not self.domain:
@@ -98,6 +119,10 @@ class Document:
             "lang": self.lang,
             "links": len(self.links),
             "error": self.error,
+            "encoding": self.encoding,
+            "encoding_source": self.encoding_source,
+            "encoding_confidence": round(self.encoding_confidence, 2),
+            "encoding_lossy": self.encoding_lossy,
         }
 
 
@@ -235,12 +260,19 @@ class RateLimiter:
 
 
 class RobotsGate:
-    """robots.txt, cached per host, fail-closed."""
+    """robots.txt, cached per host, fail-closed.
 
-    def __init__(self, user_agent: str, timeout: float = 10.0, respect: bool = True):
+    `opener` is the pinned opener from the fetcher. Without it, fetching
+    robots.txt would resolve the hostname a second time, which is the DNS
+    rebinding window the pinning exists to close.
+    """
+
+    def __init__(self, user_agent: str, timeout: float = 10.0, respect: bool = True,
+                 opener=None):
         self.user_agent = user_agent
         self.timeout = timeout
         self.respect = respect
+        self.opener = opener
         self._cache: Dict[str, Optional[urllib.robotparser.RobotFileParser]] = {}
 
     def _parser(self, scheme: str, host: str):
@@ -250,8 +282,12 @@ class RobotsGate:
         url = f"{scheme}://{host}/robots.txt"
         try:
             request = urllib.request.Request(url, headers={"User-Agent": self.user_agent})
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                body = response.read(200_000).decode("utf-8", errors="ignore")
+            if self.opener is not None:
+                with self.opener.open(request, timeout=self.timeout) as response:
+                    body = response.read(200_000).decode("utf-8", errors="ignore")
+            else:
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                    body = response.read(200_000).decode("utf-8", errors="ignore")
             parser.parse(body.splitlines())
             self._cache[host] = parser
         except urllib.error.HTTPError as exc:
@@ -287,24 +323,102 @@ class RobotsGate:
 class Fetcher:
     """One instance per run: shares the rate limiter and the robots cache."""
 
-    def __init__(self, cfg: dict):
+    def __init__(self, cfg: dict, allow_private: bool = False):
         http = cfg["http"]
         self.cfg = cfg
         self.user_agent = http["user_agent"]
         self.timeout = float(http["timeout"])
         self.max_bytes = int(http["max_bytes"])
+        self.max_compressed = int(http.get("max_compressed_bytes", self.max_bytes))
+        self.max_decompressed = int(http.get("max_decompressed_bytes", 20_000_000))
         self.max_redirects = int(http.get("max_redirects", 5))
+        #: Loopback and private destinations are refused. Tests set this to
+        #: reach a local server; nothing in the CLI sets it.
+        self.allow_private = bool(allow_private or http.get("allow_private", False))
         self.limiter = RateLimiter(float(http.get("rate_per_host", 1.0)))
-        self.robots = RobotsGate(self.user_agent, self.timeout, bool(http.get("respect_robots", True)))
+        self.opener = build_opener(allow_private=self.allow_private)
+        self.robots = RobotsGate(self.user_agent, self.timeout,
+                                 bool(http.get("respect_robots", True)),
+                                 opener=self.opener)
         self._seen: set[str] = set()
 
     # -- one page ------------------------------------------------------
-    def get(self, url: str) -> Document:
-        url = normalize_url(url)
+    def get(self, url: str, allowed_host: Optional[str] = None) -> Document:
+        """Fetch one page, following redirects by hand with a check per hop.
+
+        `urllib` would follow a redirect for us and never look at where it
+        landed. Here every hop goes through `_check_destination` (scheme,
+        robots.txt, permitted host) and the connection layer (address
+        validation and pinning) before a socket is opened.
+        """
+        try:
+            return self._get_checked(normalize_url(url), allowed_host)
+        except NetworkError as exc:
+            return Document(url=url, title="", text="", status=0,
+                            error=f"{type(exc).__name__}: {exc}")
+        except Exception as exc:                 # pragma: no cover - defensive
+            return Document(url=url, title="", text="", status=0,
+                            error=f"{type(exc).__name__}: {exc}")
+
+    def _get_checked(self, url: str, allowed_host: Optional[str]) -> Document:
+        visited: List[str] = [canonical_key(url)]
+        current = url
+        for hop in range(self.max_redirects + 1):
+            self._check_destination(current, allowed_host, first=(hop == 0))
+            status, headers, body, final_url = self._fetch_once(current)
+            if status in REDIRECT_CODES:
+                location = headers.get("Location") if headers else None
+                if not location:
+                    raise RedirectError(f"{current} answered {status} with no Location")
+                target = urllib.parse.urljoin(final_url, location)
+                key = canonical_key(target)
+                if key in visited:
+                    raise RedirectError(
+                        f"redirect loop: {target} already visited in this chain")
+                visited.append(key)
+                current = target
+                continue
+            return self._build_document(final_url, status, headers, body)
+        raise RedirectError(
+            f"more than {self.max_redirects} redirects starting at {url}")
+
+    def _check_destination(self, url: str, allowed_host: Optional[str],
+                           first: bool = True) -> None:
+        """Every hop passes this before any socket is opened.
+
+        Order matters. The address is validated *before* robots.txt is fetched,
+        because fetching robots.txt is itself a request to the host: checking it
+        first would mean connecting to 169.254.169.254 in order to ask whether
+        we may connect to 169.254.169.254.
+
+        `file` is allowed only for the first hop. A remote page must never be
+        able to redirect the harvester into reading a local file -- that turns
+        one permitted URL into `/etc/passwd`.
+        """
+        scheme = check_scheme(url)               # raises UnsafeDestination
+        if scheme == "file":
+            if not first:
+                raise UnsafeDestination(
+                    "a redirect may not target file://; local files are read only "
+                    "when they are the requested source, never as a destination")
+            return
+
+        host = host_of(url)
+        # Policy before network: leaving the permitted host needs no DNS lookup
+        # to detect, and asking for one would leak the hostname of a page we
+        # are about to refuse.
+        if allowed_host and host != allowed_host:
+            raise RedirectError(f"{url} leaves the permitted host {allowed_host!r}")
+
+        port = urlsplit(url).port or (443 if scheme == "https" else 80)
+        resolve_safe(host, port, allow_private=self.allow_private)
+
         allowed, why = self.robots.allowed(url)
         if not allowed:
-            return Document(url=url, title="", text="", status=0, error=f"robots: {why}")
+            raise UnsafeDestination(f"robots: {why}")
 
+    def _fetch_once(self, url: str):
+        """One request. No redirect is followed here; the caller decides."""
         host = host_of(url)
         self.limiter.wait(host)
         request = urllib.request.Request(url, headers={
@@ -314,39 +428,62 @@ class Fetcher:
             "Accept-Encoding": "gzip, deflate",
         })
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                raw = response.read(self.max_bytes)
-                encoding = (response.headers.get("Content-Encoding") or "").lower()
-                if encoding == "gzip":
-                    raw = gzip.decompress(raw)
-                elif encoding == "deflate":
-                    raw = zlib.decompress(raw, -zlib.MAX_WBITS)
-                charset = response.headers.get_content_charset() or "utf-8"
-                # file:// responses carry status None rather than 200
-                status = getattr(response, "status", None) or getattr(response, "code", None) or 200
-                final_url = response.geturl() or url
+            response = self.opener.open(request, timeout=self.timeout)
         except urllib.error.HTTPError as exc:
-            return Document(url=url, title="", text="", status=exc.code,
-                            error=f"HTTP {exc.code} {exc.reason}")
-        except Exception as exc:
-            return Document(url=url, title="", text="", status=0, error=f"{type(exc).__name__}: {exc}")
+            if exc.code in REDIRECT_CODES:
+                headers = exc.headers
+                exc.close()
+                return exc.code, headers, b"", url
+            raise NetworkError(f"HTTP {exc.code} {exc.reason}") from exc
 
         try:
-            html = raw.decode(charset, errors="replace")
-        except LookupError:
-            html = raw.decode("utf-8", errors="replace")
+            with response:
+                status = (getattr(response, "status", None)
+                          or getattr(response, "code", None) or 200)
+                headers = response.headers
+                final_url = response.geturl() or url
+                raw = self._read_capped(response)
+        except NetworkError:
+            raise
+        except Exception as exc:
+            raise NetworkError(f"{type(exc).__name__}: {exc}") from exc
 
-        title, text, links = html_to_text(html, final_url)
+        encoding = (headers.get("Content-Encoding") or "").lower() if headers else ""
+        body = decompress_capped(raw, encoding, self.max_decompressed)
+        return status, headers, body, final_url
+
+    def _read_capped(self, response) -> bytes:
+        """Read the body, refusing to buffer more than the compressed cap."""
+        raw = bytearray()
+        while True:
+            chunk = response.read(65536)
+            if not chunk:
+                break
+            raw += chunk
+            if len(raw) > self.max_compressed:
+                raise ResponseTooLarge(
+                    f"response body exceeded {self.max_compressed} bytes (compressed)")
+        return bytes(raw)
+
+    def _build_document(self, url: str, status: int, headers, body: bytes) -> Document:
+        header_charset = headers.get_content_charset() if headers else None
+        result: CharsetResult = detect_charset(body, header_charset)
+        html, lossy = decode(body, result)
+        title, text, links = html_to_text(html, url)
         if not title:
             first = next((line for line in text.splitlines() if line.strip()), "")
             title = first[:120]
         return Document(
-            url=final_url,
+            url=url,
             title=title,
             text=text,
-            raw_chars=len(raw),
+            raw_chars=len(body),
             status=status,
             links=links,
+            encoding=result.encoding,
+            encoding_source=result.source,
+            encoding_confidence=result.confidence,
+            encoding_lossy=lossy or result.lossy,
         )
 
     # -- many pages ----------------------------------------------------
@@ -366,7 +503,7 @@ class Fetcher:
             seen.add(key)
             if same_domain and root_host and host_of(url) != root_host:
                 continue
-            doc = self.get(url)
+            doc = self.get(url, allowed_host=root_host if same_domain else None)
             docs.append(doc)
             if not doc.ok or depth >= max_depth:
                 continue

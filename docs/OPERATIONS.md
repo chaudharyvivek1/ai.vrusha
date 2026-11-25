@@ -56,6 +56,33 @@ on the seed domain unless you pass `--any-domain`. These are defaults you can
 change; the reason they are defaults is that the alternative gets your IP
 blocked and the site annoyed.
 
+## Network safety, and the settings that control it
+
+| key | default | what it does |
+|---|---|---|
+| `http.max_redirects` | 5 | hops followed before the chain is refused |
+| `http.max_compressed_bytes` | 3,000,000 | ceiling on the body on the wire |
+| `http.max_decompressed_bytes` | 20,000,000 | ceiling on what it may expand to, enforced *during* decompression |
+| `http.allow_private` | `false` | loopback and private destinations. **Tests only**; the CLI never sets it |
+
+A fetch can fail in ways you should be able to tell apart:
+
+| error | means |
+|---|---|
+| `UnsafeDestination: ... is a link-local address` | the URL, or a redirect, pointed at `169.254.x.x` or another internal range |
+| `UnsafeDestination: robots: ...` | robots.txt disallows it, or could not be read (fail-closed) |
+| `RedirectError: ... leaves the permitted host` | a crawl tried to leave the seed domain |
+| `RedirectError: redirect loop` | the chain came back to a URL it had already visited |
+| `ResponseTooLarge` | the body, compressed or decompressed, exceeded its ceiling |
+| `DecompressionError` | the gzip/deflate stream was malformed, truncated, or an encoding we do not support |
+
+None of these is a reason to raise the limit. A body that expands 1000× is
+either a mistake or an attack, and both want the same answer.
+
+If a site you legitimately want is refused, the fix is `policy.refused_domains`
+in reverse — check that the URL is public and that robots.txt allows it — not a
+config flag that turns the guard off.
+
 ## Reading the numbers
 
 | number | where | what it means when it is wrong |

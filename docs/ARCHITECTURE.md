@@ -49,6 +49,46 @@ That is the design bet: if related material sits at nearby addresses, then
 proximity is a retrieval signal, a training-data filter, a browse interface and
 a debugging tool, all from one number. See [ADDRESS.md](ADDRESS.md).
 
+## Harvest safety: the network is the attack surface
+
+The harvester follows URLs that strangers wrote, so `harvest/net.py` treats
+every one as hostile until it has been checked.
+
+**Redirects are followed by hand.** `urllib` follows a redirect itself and
+never looks at where it landed, so robots.txt and the domain restriction apply
+only to the URL you asked for. Here `NoRedirectHandler` makes the opener return
+the 3xx, and `_get_checked` walks the chain one hop at a time. Every hop passes
+`_check_destination` before a socket opens:
+
+1. **scheme** — `http`, `https`, and `file` only for the first hop. A remote
+   page must never be able to redirect the harvester into reading a local file.
+2. **permitted host** — checked before any DNS lookup, so a refused page's
+   hostname is not even resolved.
+3. **address** — the hostname is resolved and the *address* is validated.
+   Loopback, private, link-local, multicast, reserved and unspecified are
+   refused. `169.254.169.254` is the cloud metadata service, and it is the
+   reason this check exists.
+4. **robots.txt** — fetched through the same pinned opener, so the robots
+   request cannot be rebound either.
+
+**Connections are pinned.** `PinnedHTTPConnection` resolves once, validates the
+answer, and connects to *that* address. Resolve-then-connect-by-name leaves a
+window where the second DNS answer is a different one; connecting to the
+validated sockaddr closes it. TLS still verifies the certificate against the
+hostname from the URL (`server_hostname`), so pinning does not weaken it.
+
+**Bodies are bounded twice.** The compressed body is capped while reading, and
+the decompressed body is capped *during* decompression: `zlib.decompressobj` is
+given a `max_length` on every call, so a 40 KB gzip that expands to 40 MB
+raises before the 40 MB is allocated. Checking the size afterwards would mean
+allocating the bomb first, which is the attack.
+
+**Encoding is decided once and recorded.** BOM, then HTTP header, then
+`<meta charset>`, then strict UTF-8, then a guess, then a flagged fallback. The
+chosen encoding, its source and a confidence go into the harvest manifest, so a
+mis-decode is visible after the fact instead of being silently baked into the
+corpus.
+
 ## Why SQLite
 
 One file, no server, no daemon, no port. FTS5 gives BM25 inside the same

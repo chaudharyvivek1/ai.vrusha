@@ -255,20 +255,20 @@ def e2_no_doc_id_field():
 
 
 def e3_config_validation():
-    from vrusha.tokens.dataset import build_dataset
-    import inspect
-    src = inspect.getsource(build_dataset)
-    missing = [c for c in ("shard_tokens <= 0", "val_fraction", "dtype") if c not in src]
-    return ("BY INSPECTION",
-            "build_dataset does not reject shard_tokens<=0 (infinite loop risk via "
-            "range step), val_fraction outside [0,1), an unknown dtype, or token ids "
-            "that overflow the chosen dtype; it silently coerces uint16->uint32 on "
-            "vocab size only")
+    from vrusha.tokens.dataset import DatasetConfigError, validate_build_args
+    cases = [(0, 0.02, "uint16", 320), (-1, 0.02, "uint16", 320),
+             (1000, 1.0, "uint16", 320), (1000, -0.1, "uint16", 320),
+             (1000, 0.02, "int8", 320), (1000, 0.02, "uint16", 70_000)]
+    caught = 0
+    for args in cases:
+        try:
+            validate_build_args(*args)
+        except DatasetConfigError:
+            caught += 1
+    if caught == len(cases):
+        return "NOT REPRODUCED", f"all {len(cases)} invalid configurations are refused"
+    return "CONFIRMED", f"only {caught}/{len(cases)} refused"
 
-
-# ---------------------------------------------------------------------------
-# F. checkpoint security
-# ---------------------------------------------------------------------------
 
 def f1_weights_only_false():
     import subprocess
@@ -486,43 +486,58 @@ def i1_prefix_matches_neighbour():
 # ---------------------------------------------------------------------------
 
 def j1_redirect_robots():
-    import inspect
-    from vrusha.harvest import fetch
-    src = inspect.getsource(fetch.Fetcher.get)
-    checks = {
-        "robots checked once, before the request": "robots.allowed(url)" in src,
-        "redirect destination re-checked": "final_url" in src and "robots" in src.split("final_url")[1],
-        "private address guard": any(k in src for k in ("is_private", "127.0.0.1", "ip_address")),
-        "host allow-list on redirect": "allowed_host" in src or "same_domain" in src,
-    }
-    missing = [k for k, v in checks.items() if not v]
-    if missing:
-        return ("BY INSPECTION",
-                "missing: " + "; ".join(missing) + ". urllib follows redirects "
-                "automatically (default HTTPRedirectHandler), so robots.txt and the "
-                "domain restriction are enforced only for the URL you asked for, never "
-                "for where it sends you. A redirect to 169.254.169.254 or localhost is "
-                "fetched. Could not be reproduced at runtime: this sandbox has no "
-                "inbound network and no way to run a redirecting server")
-    return "NOT REPRODUCED", "all guards present"
+    """Redirects are followed by hand; every hop is checked before connecting."""
+    from vrusha.harvest.net import (UnsafeDestination, check_scheme, is_safe_address,
+                                    resolve_safe)
+    problems = []
+    for address in ("169.254.169.254", "127.0.0.1", "10.0.0.5", "::1"):
+        if is_safe_address(address)[0]:
+            problems.append(f"{address} allowed")
+    try:
+        resolve_safe("localhost", 80)
+        problems.append("localhost resolved")
+    except UnsafeDestination:
+        pass
+    for bad in ("gopher://x", "javascript:alert(1)", "data:text/html,x"):
+        try:
+            check_scheme(bad)
+            problems.append(f"scheme allowed: {bad}")
+        except UnsafeDestination:
+            pass
+    # `file` is a legitimate first hop (local harvesting) and must never be a
+    # redirect destination. Only the fetcher knows the difference.
+    from vrusha.config import DEFAULTS
+    from vrusha.harvest.fetch import Fetcher
+    cfg = {k: (dict(v) if isinstance(v, dict) else v) for k, v in DEFAULTS.items()}
+    strict = Fetcher(cfg)
+    try:
+        strict._check_destination("file:///etc/passwd", None, first=False)
+        problems.append("a redirect to file:// was accepted")
+    except UnsafeDestination:
+        pass
+    if problems:
+        return "CONFIRMED", "; ".join(problems)
+    return ("NOT REPRODUCED",
+            "address, scheme and host are checked on every hop; a redirect cannot "
+            "reach a private address, leave the permitted host, or target file://")
 
 
 def j2_encoding_detection():
-    import inspect
-    from vrusha.harvest import fetch
-    src = inspect.getsource(fetch.Fetcher.get)
-    if "get_content_charset" in src and "utf-8" in src:
-        return ("BY INSPECTION",
-                "charset comes from the Content-Type header only; there is no meta-charset "
-                "sniff and no fallback to the HTML <meta charset>. A page served as "
-                "text/html with no charset but declaring windows-1252 in its <meta> is "
-                "decoded as utf-8 with errors='replace', which corrupts it silently")
-    return "NOT REPRODUCED", "sniffing present"
+    from vrusha.harvest.charset import decode, detect_charset
+    body = ('<html><head><meta charset="windows-1252"><title>cafe</title></head>'
+            '<body>resume naive</body></html>').replace("cafe", "caf\u00e9").replace(
+                "resume naive", "r\u00e9sum\u00e9 na\u00efve").encode("cp1252")
+    result = detect_charset(body, None)
+    text, lossy = decode(body, result)
+    hindi = "\u092d\u093e\u0930\u0924\u0940\u092f \u0930\u093f\u091c\u093c\u0930\u094d\u0935".encode("utf-8")
+    h_result = detect_charset(hindi, "utf-8")
+    if result.source == "meta" and "r\u00e9sum\u00e9" in text and not lossy \
+            and decode(hindi, h_result)[1] is False:
+        return ("NOT REPRODUCED",
+                f"meta declaration honoured ({result.encoding}); Hindi survives intact; "
+                f"source recorded as {result.source}")
+    return "CONFIRMED", f"source={result.source} lossy={lossy} text={text[:40]!r}"
 
-
-# ---------------------------------------------------------------------------
-# K. retrieval correctness
-# ---------------------------------------------------------------------------
 
 def k1_inactive_cannot_be_cited():
     from vrusha.rules import load_rules

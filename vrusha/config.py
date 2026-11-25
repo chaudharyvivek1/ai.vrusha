@@ -30,10 +30,17 @@ DEFAULTS: Dict[str, Any] = {
     "http": {
         "timeout": 20.0,
         "max_bytes": 3_000_000,
+        #: Ceiling on the compressed body, and a separate ceiling on what it is
+        #: allowed to expand to. Both are enforced while reading/decompressing.
+        "max_compressed_bytes": 3_000_000,
+        "max_decompressed_bytes": 20_000_000,
         "user_agent": "vrusha/0.1 (+https://github.com/chaudharyvivek1/ai.vrusha)",
         "rate_per_host": 1.0,          # seconds between requests to one host
         "respect_robots": True,
         "max_redirects": 5,
+        #: Loopback and private destinations are refused. Only tests set this;
+        #: nothing in the CLI does, and no rule can turn it on.
+        "allow_private": False,
     },
     "harvest": {
         "max_pages": 40,               # per crawl run
@@ -151,16 +158,35 @@ def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any
     return base
 
 
+class ConfigError(ValueError):
+    """A config file that cannot be read or parsed, named clearly."""
+
+
+def _read_config_file(path: str) -> Dict[str, Any]:
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            loaded = json.load(fh)
+    except FileNotFoundError as exc:
+        raise ConfigError(f"config file not found: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise ConfigError(
+            f"{path} is not valid JSON (line {exc.lineno}, column {exc.colno}: "
+            f"{exc.msg})") from exc
+    except OSError as exc:
+        raise ConfigError(f"cannot read {path}: {exc}") from exc
+    if not isinstance(loaded, dict):
+        raise ConfigError(f"{path} must contain a JSON object, not {type(loaded).__name__}")
+    return loaded
+
+
 def load_config(path: str | os.PathLike | None = None) -> Dict[str, Any]:
     """Defaults, then ./config/vrusha.json, then `path`, then the environment."""
     cfg = copy.deepcopy(DEFAULTS)
     local = os.path.join("config", "vrusha.json")
     if os.path.exists(local):
-        with open(local, "r", encoding="utf-8") as fh:
-            _deep_merge(cfg, json.load(fh))
+        _deep_merge(cfg, _read_config_file(local))
     if path:
-        with open(path, "r", encoding="utf-8") as fh:
-            _deep_merge(cfg, json.load(fh))
+        _deep_merge(cfg, _read_config_file(str(path)))
     _env_overrides(cfg)
     return cfg
 

@@ -17,9 +17,12 @@ Baseline: `23958be`. Reproduce anything here with `python docs/audit/repro_phase
 | H1 | stale near-neighbour edges | **fixed** | 3 |
 | H2 | stale centroids | **fixed** | 3 |
 | B1/B2/K3 | address distance not semantic; signal over-weighted | **fixed** | 3 |
-| J1 | redirects bypass robots/domain/SSRF checks | **open** | 4 |
-| J2 | charset never sniffed | **open** | 4 |
-| E3 | dataset config unvalidated | **open** | 4 |
+| J1 | redirects bypass robots/domain/SSRF checks | **fixed** | 4 |
+| N1 | decompression had no bound | **fixed** | 4 |
+| J2 | charset never sniffed | **fixed** | 4 |
+| E3 | dataset config unvalidated | **fixed** | 4 |
+| N2 | robots.txt fetched before the address check | **fixed** | 4 |
+| N3 | a redirect could target `file://` and read local files | **fixed** | 4 |
 
 ---
 
@@ -178,13 +181,90 @@ primary ranking signal, your ordering will change: it is now a tiebreaker.
 
 ---
 
+## Wave 4 — network safety, decompression and dataset configuration
+
+### J1 · redirects bypassed every check
+
+**Was.** `urllib` followed redirects itself. robots.txt and the domain
+restriction were enforced for the URL you asked for and never for where it
+sent you, and nothing checked the destination address at all. A permitted
+public page could redirect the harvester to `169.254.169.254` or
+`127.0.0.1:6379`.
+
+**Now.** Redirects are followed by hand, one hop at a time. Every hop checks
+scheme, permitted host, resolved address and robots.txt, in that order, before
+a socket opens. Connections are pinned to the validated address so a second DNS
+answer cannot move them, and TLS still verifies the hostname. Loops are
+detected by canonical URL, and the hop count is capped.
+
+### N2 · robots.txt was fetched before the address check
+
+**Found while fixing J1**, and a genuine hole in the first attempt at the fix:
+`_check_destination` asked robots.txt first, and fetching robots.txt is itself
+a request to the host. Checking robots for `169.254.169.254` meant connecting
+to `169.254.169.254` to ask whether connecting to it was allowed. The address
+check now runs first, and the robots fetch goes through the same pinned opener.
+
+### N3 · a redirect could target `file://`
+
+**Found while fixing J1.** `file` is an allowed scheme because local harvesting
+is a first-class path, and the redirect loop accepted any allowed scheme — so a
+remote page could redirect the fetcher to `file:///etc/passwd` and it would be
+read and stored. `file` is now permitted only for the first hop, never as a
+redirect destination.
+
+### N1 · decompression was unbounded
+
+**Was.** `gzip.decompress(raw)` on a body that had already been read into
+memory. A 40 KB body expanding to 40 GB was decompressed in full before
+anything looked at its size.
+
+**Now.** Two ceilings: the compressed body is capped while reading, and the
+decompressed output is capped *during* decompression by giving `zlib` a
+`max_length` per call. Malformed, truncated and unsupported encodings raise
+`DecompressionError`; deflate is tried as both zlib-wrapped and raw, because
+both exist in the wild.
+
+### J2 · encoding came from the header or nowhere
+
+**Was.** `headers.get_content_charset() or "utf-8"`, then
+`decode(..., errors="replace")`. A page with no charset header and cp1252 bytes
+became U+FFFD everywhere, and the quality gate then rejected it for a reason
+that had nothing to do with its content.
+
+**Now.** BOM, then header, then `<meta charset>`, then strict UTF-8, then
+`charset_normalizer` if installed, then a flagged fallback. A header that cannot
+decode the body is discarded rather than trusted. The encoding, its source and a
+confidence are recorded in the harvest manifest and in `Document.to_manifest()`.
+
+### E3 · dataset configuration was unvalidated
+
+**Was.** `shard_tokens=0`, `val_fraction=1.5`, `dtype="int8"` and a vocabulary
+larger than the dtype all passed silently; `uint16` was silently upgraded to
+`uint32` even when the caller had asked for `uint16` explicitly.
+
+**Now.** `validate_build_args` runs before the output directory is created, so a
+refused build leaves nothing on disk. `dtype=None` means auto (uint16 unless the
+vocabulary needs uint32); an explicit dtype is honoured strictly and a
+contradiction raises. Token ids are checked against the dtype after encoding.
+
+**Migration.** `vrusha dataset` now defaults `--dtype auto` instead of
+`uint16`. Anyone who relied on the old silent upgrade gets the same result;
+anyone who passed `--dtype uint16` with a large vocabulary now gets an error
+instead of a different dtype than they asked for.
+
+---
+
 ## Still open
 
-| ID | Defect | Why it is still open |
-|---|---|---|
-| J1 | redirects bypass robots, domain limits and the private-address guard | needs a loopback test server; no inbound network in the build sandbox |
-| J2 | charset taken from the header only | same session as J1 |
-| E3 | dataset config unvalidated (`shard_tokens<=0`, bad `val_fraction`, dtype overflow) | low risk, scheduled with Wave 4 |
+Nothing from the Phase 1 audit. Three items were found during Wave 4 and fixed
+in the same branch (N1, N2, N3). The remaining risks are not defects:
+
+| Risk | Why it is not a defect |
+|---|---|
+| `file://` is still an allowed scheme for the *first* hop | local harvesting is a supported path and the path comes from the operator, not from a web page |
+| No proxy-aware pinning | a proxy would tunnel the connection, so the pinned address applies to the proxy. Correct for this design, wrong behind a mandatory proxy; documented rather than silently changed |
+| `charset_normalizer` is optional | without it, an undeclared non-UTF-8 page is decoded as UTF-8 and flagged lossy. The flag is the guarantee; the guess is the bonus |
 
 ---
 
@@ -195,6 +275,8 @@ primary ranking signal, your ordering will change: it is now a tiebreaker.
 | baseline | `tests/test_core.py`, `test_pipeline.py`, `test_model.py` | 59 |
 | 1 | `tests/test_regressions.py` | 38 |
 | 2–3 | `tests/test_regressions_wave23.py` | 24 |
-| **total** | | **121** |
+| 4 | `tests/test_wave4_network.py` | 52 |
+| 4 | `tests/test_wave4_dataset.py` | 38 |
+| **total** | | **211** |
 
 Each regression test fails against `23958be` for the defect it names.

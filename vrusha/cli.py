@@ -29,7 +29,7 @@ import sys
 from typing import List, Optional
 
 from . import __version__
-from .config import ensure_dirs, load_config, resolve
+from .config import ConfigError, ensure_dirs, load_config, resolve
 from .languages import LanguageError, load_registry
 from .rules import RuleError, load_rules
 
@@ -441,7 +441,7 @@ def cmd_tokenize(args, cfg, rules, registry) -> int:
 
 def cmd_dataset(args, cfg, rules, registry) -> int:
     from .tokens.bpe import Tokenizer
-    from .tokens.dataset import build_dataset, corpus_from_store
+    from .tokens.dataset import DatasetConfigError, build_dataset, corpus_from_store
 
     tokenizer_path = args.tokenizer or os.path.join(resolve(cfg, "tokens"), "tokenizer.json")
     if not os.path.exists(tokenizer_path):
@@ -457,9 +457,13 @@ def cmd_dataset(args, cfg, rules, registry) -> int:
         return 1
 
     out = args.out or os.path.join(resolve(cfg, "tokens"), "dataset")
-    manifest = build_dataset(items, tokenizer, out, shard_tokens=args.shard_tokens,
-                             val_fraction=args.val_fraction, dtype=args.dtype,
-                             tokenizer_path=tokenizer_path, verbose=not args.json)
+    try:
+        manifest = build_dataset(items, tokenizer, out, shard_tokens=args.shard_tokens,
+                                 val_fraction=args.val_fraction, dtype=args.dtype,
+                                 tokenizer_path=tokenizer_path, verbose=not args.json)
+    except DatasetConfigError as exc:
+        print(f"dataset: {exc}")
+        return 2
     _emit(args, manifest,
           f"dataset    {out}\n  tokens     {manifest['total_tokens']:,}\n"
           f"  shards     {len(manifest['shards'])}\n"
@@ -665,7 +669,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out")
     p.add_argument("--shard-tokens", type=int, default=2_000_000)
     p.add_argument("--val-fraction", type=float, default=0.02)
-    p.add_argument("--dtype", default="uint16", choices=["uint16", "uint32"])
+    p.add_argument("--dtype", default="auto", choices=["auto", "uint16", "uint32"],
+                   help="token width; auto picks uint16 unless the vocabulary needs uint32")
     p.add_argument("--min-chars", type=int, default=80)
     p.set_defaults(func=cmd_dataset)
 
@@ -706,7 +711,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    cfg = load_config(args.config)
+    try:
+        cfg = load_config(args.config)
+    except ConfigError as exc:
+        print(f"config: {exc}")
+        return 2
     if args.root:
         cfg["paths"]["root"] = args.root
     if args.verbose:
