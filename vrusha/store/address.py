@@ -40,9 +40,20 @@ where the integer part is the domain and each later segment is two digits:
     (0, 5, 0, 0,  0)   ->   "0.05000000"     <- the "0.5" region you described
     (0, 5, 1, 0,  0)   ->   "0.05010000"     <- inside it
 
-So "0.5" is a real prefix: everything starting "0.05" is under it. `parse`
-accepts the dotted form, the float form and the short prefix form, and all
-three of "0.5", "0.05" and "0.05000000" mean the same thing.
+So "0.5" is a real prefix: everything starting "0.05" is under it.
+
+When any segment exceeds 99 the tail widens to three digits per segment, so
+the rendering stays injective instead of silently producing a string that
+cannot be read back:
+
+    (2, 3, 1, 4, 100)  ->   "2.003001004100"
+
+`parse` tells the two apart by the tail length alone (8 digits = 2-digit
+groups, 12 digits = 3-digit groups) and reads everything else as literal
+dot-separated segments. Because `MAX_SEGMENT` caps every segment at 999, a
+literal segment is never more than three digits, so the packed form can never
+collide with a dotted one. "0.5", "0.05" and "0.05000000" all mean the same
+address.
 """
 from __future__ import annotations
 
@@ -82,6 +93,11 @@ CODE_KIND_IDS = {name: idx for idx, name in CODE_KINDS.items()}
 #: every segment. Distances are not normalised by it; see `similarity`.
 UNIT_DISTANCE = sum(WEIGHTS)
 
+#: Largest value any segment may hold. This is what keeps the dotted form and
+#: the packed float form distinguishable: a literal segment is at most three
+#: digits, so an 8- or 12-digit tail can only be packed.
+MAX_SEGMENT = 999
+
 
 class AddressError(ValueError):
     """Raised when a string cannot be read as an address."""
@@ -106,6 +122,9 @@ class Address:
         for i, value in enumerate(segs):
             if value < 0:
                 raise AddressError(f"segment {i + 1} is negative: {value}")
+            if value > MAX_SEGMENT:
+                raise AddressError(
+                    f"segment {i + 1} is {value}, above the maximum of {MAX_SEGMENT}")
         # pad to five so comparisons and distances never need to special-case
         # depth. A shorter address is a prefix, and a prefix ends in zeros.
         object.__setattr__(self, "segments", segs + (0,) * (SEGMENTS - len(segs)))
@@ -134,18 +153,30 @@ class Address:
         parts = [p for p in text.split(".") if p != ""]
         if not parts:
             raise AddressError(f"not an address: {value!r}")
-        segs: list[int] = []
         for part in parts:
             if not part.isdigit():
                 raise AddressError(f"not an address: {value!r}")
-            if len(part) <= 2:
-                segs.append(int(part))
-            else:
-                # packed form: '03010417' -> 03 01 04 17
-                if len(part) % 2:
-                    part = part.zfill(len(part) + 1)
-                segs.extend(int(part[i:i + 2]) for i in range(0, len(part), 2))
-        return cls(tuple(segs))
+
+        # Packed float form is recognised by tail length and nothing else:
+        # 8 digits -> four 2-digit segments, 12 digits -> four 3-digit
+        # segments. A literal segment can never be longer than three digits
+        # (MAX_SEGMENT), so anything longer than that in the tail can only be
+        # packed -- and if it is not one of the two valid widths, it is a
+        # malformed packed address rather than a silently reinterpreted one.
+        if len(parts) == 2:
+            tail = parts[1]
+            if len(tail) == 8:
+                return cls(tuple([int(parts[0])] +
+                                 [int(tail[i:i + 2]) for i in range(0, 8, 2)]))
+            if len(tail) == 12:
+                return cls(tuple([int(parts[0])] +
+                                 [int(tail[i:i + 3]) for i in range(0, 12, 3)]))
+            if len(tail) > 3:
+                raise AddressError(
+                    f"malformed packed address {value!r}: the tail must be 8 or 12 "
+                    f"digits, got {len(tail)}")
+
+        return cls(tuple(int(part) for part in parts))
 
     # ------------------------------------------------------------------
     # shape
@@ -243,10 +274,17 @@ class Address:
         return ".".join(str(x) for x in self.segments[:depth])
 
     def float_str(self) -> str:
-        """'2.03010417' — the form you sort in a spreadsheet."""
-        head = str(self.segments[0])
-        tail = "".join(f"{x:02d}" for x in self.segments[1:])
-        return f"{head}.{tail}"
+        """'2.03010417' — the form you sort in a spreadsheet.
+
+        Two digits per segment while every segment fits in 99, which keeps the
+        rendering identical for every address that existed before this rule.
+        Past 99 the whole tail widens to three digits per segment, so the
+        string stays injective and `parse` can read it back.
+        """
+        tail = self.segments[1:]
+        width = 2 if all(x <= 99 for x in tail) else 3
+        body = "".join(f"{x:0{width}d}" for x in tail)
+        return f"{self.segments[0]}.{body}"
 
     def label(self) -> str:
         """Human sentence for reports: 'code / family 3 / module / cluster 4 / #17'.

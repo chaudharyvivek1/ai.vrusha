@@ -310,10 +310,20 @@ def gate_size(text: str, rules: RuleSet) -> GateResult:
 
 
 def gate_quality(text: str, raw_chars: int, rules: RuleSet) -> GateResult:
-    """Level 6: content, not navigation. Two independent measures."""
+    """Level 6: content, not navigation. Two independent measures.
+
+    The text ratio compares **bytes with bytes**. `raw_chars` is the size of
+    the fetched body, which is bytes; measuring the extracted text in
+    characters and dividing by bytes makes the ratio depend on the encoding
+    rather than on the content. Devanagari is three bytes per character, so
+    every correct Hindi page scored about 0.33 and was rejected by a 0.45
+    floor, while the same page in English scored 0.99. Both sides are now
+    UTF-8 byte counts, so the number means what it says.
+    """
     min_ratio = float(rules.get("quality.min_text_ratio", default=0.45) or 0.45)
     max_links = float(rules.get("quality.max_link_density", default=0.30) or 0.30)
-    ratio = (len(text) / raw_chars) if raw_chars else 1.0
+    text_bytes = len(text.encode("utf-8"))
+    ratio = (text_bytes / raw_chars) if raw_chars else 1.0
     link_chars = sum(len(m) for m in re.findall(r"https?://\S+", text))
     link_density = (link_chars / len(text)) if text else 1.0
     problems = []
@@ -321,7 +331,8 @@ def gate_quality(text: str, raw_chars: int, rules: RuleSet) -> GateResult:
         problems.append(f"text ratio {ratio:.2f} < {min_ratio}")
     if link_density > max_links:
         problems.append(f"link density {link_density:.2f} > {max_links}")
-    detail = {"text_ratio": round(ratio, 3), "link_density": round(link_density, 3)}
+    detail = {"text_ratio": round(ratio, 3), "link_density": round(link_density, 3),
+              "text_bytes": text_bytes, "raw_bytes": raw_chars}
     if problems:
         return GateResult("quality", 6, False, "block", "; ".join(problems), detail)
     return GateResult("quality", 6, True, "allow", "content", detail)

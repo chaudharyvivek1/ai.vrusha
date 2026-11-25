@@ -98,6 +98,27 @@ Sorting the float column sorts the tree in order: a parent comes before all of
 its children. `parse` accepts all three forms — `"0.5"`, `"0.05"` and
 `"0.05000000"` are the same address.
 
+### Past 99
+
+Two digits cannot express 100, so when any segment exceeds 99 the whole tail
+widens to three digits per segment:
+
+| address | float |
+|---|---|
+| `2.3.1.4.100` | `2.003001004100` |
+| `2.3.1.4.999` | `2.003001004999` |
+
+`parse` tells the forms apart by tail length alone — 8 digits is four 2-digit
+groups, 12 digits is four 3-digit groups, anything shorter is literal
+dot-separated segments. Every segment is capped at `MAX_SEGMENT` (999), so a
+literal segment is never more than three digits and the packed form can never
+collide with a dotted one. A tail of 9, 10, 11 or 13+ digits is a malformed
+packed address and is refused rather than reinterpreted.
+
+This matters in practice: `assign.address` writes one ordinal per chunk inside
+a cluster, and a cluster with more than 99 chunks is ordinary. Before this
+rule the parser refused every such address and the pass pipeline raised.
+
 ## How an address is assigned
 
 Only the `assign.address` pass writes an address, and it writes one from four

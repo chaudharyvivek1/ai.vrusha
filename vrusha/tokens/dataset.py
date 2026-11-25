@@ -37,30 +37,54 @@ class CorpusItem:
     lang: str = ""
     kind: str = ""
     address: str = ""
+    #: The document this chunk came from. The split is made on this, never on
+    #: chunk_id: chunks of one document are inserted consecutively, so hashing
+    #: chunk_id puts two halves of the same document on opposite sides of the
+    #: boundary and the validation set leaks into training.
+    doc_id: int = 0
+
+    @property
+    def split_key(self) -> int:
+        """Document identity when we have it, chunk identity when we do not."""
+        return self.doc_id or self.chunk_id
 
 
 def corpus_from_store(store: Store, min_chars: int = 80,
                       address_prefix: Optional[str] = None) -> List[CorpusItem]:
-    """Every active chunk as training text, optionally limited to an address region."""
-    query = ("SELECT chunk_id, text, lang, kind, address FROM chunks "
+    """Every active chunk as training text, optionally limited to an address region.
+
+    The region is matched on the integer address columns, not on the address
+    string. A string prefix test makes "2.1" match "2.10" and "2.11", which
+    are siblings of "2.1", not descendants of it.
+    """
+    from ..store.address import Address
+
+    query = ("SELECT chunk_id, doc_id, text, lang, kind, address FROM chunks "
              "WHERE active = 1 AND chars >= ?")
     params: List = [min_chars]
     if address_prefix:
-        query += " AND address LIKE ?"
-        params.append(address_prefix + "%")
+        region = Address.parse(address_prefix)
+        columns = ["addr_domain", "addr_family", "addr_kind", "addr_cluster",
+                   "addr_ordinal"][:max(1, region.depth)]
+        query += " AND " + " AND ".join(f"{c} = ?" for c in columns)
+        params.extend(region.segments[:len(columns)])
     query += " ORDER BY chunk_id"
     return [
         CorpusItem(int(r["chunk_id"]), r["text"] or "", r["lang"] or "",
-                   r["kind"] or "", r["address"] or "")
+                   r["kind"] or "", r["address"] or "", int(r["doc_id"] or 0))
         for r in store.conn.execute(query, params).fetchall()
     ]
 
 
-def _is_validation(chunk_id: int, fraction: float) -> bool:
-    """Stable by chunk id: the same chunk is always on the same side."""
+def _is_validation(split_key: int, fraction: float) -> bool:
+    """Stable by key: the same key is always on the same side.
+
+    `split_key` is a document id in normal use, so every chunk of a document
+    lands in the same split and the validation set cannot leak into training.
+    """
     if fraction <= 0:
         return False
-    digest = hashlib.blake2b(str(chunk_id).encode(), digest_size=4).digest()
+    digest = hashlib.blake2b(str(split_key).encode(), digest_size=4).digest()
     bucket = int.from_bytes(digest, "big") % 10_000
     return bucket < int(fraction * 10_000)
 
@@ -84,11 +108,18 @@ def build_dataset(
 
     streams: dict[str, List[int]] = {"train": [], "val": []}
     counts = {"train": 0, "val": 0}
+    documents: dict[str, set] = {"train": set(), "val": set()}
     for item in items:
-        split = "val" if _is_validation(item.chunk_id, val_fraction) else "train"
+        split = "val" if _is_validation(item.split_key, val_fraction) else "train"
         ids = tokenizer.encode(item.text, add_specials=True)
         streams[split].extend(ids)
         counts[split] += 1
+        documents[split].add(item.split_key)
+
+    # A document in both splits is a leak, and a leak makes the validation
+    # loss meaningless. It cannot happen with document-keyed hashing; the
+    # number is recorded so a future change to the split has to face it.
+    leaked = documents["train"] & documents["val"]
 
     shards: List[dict] = []
     total = 0
@@ -114,6 +145,8 @@ def build_dataset(
         "shard_tokens": shard_tokens,
         "val_fraction": val_fraction,
         "documents": counts,
+        "document_ids": {"train": len(documents["train"]), "val": len(documents["val"])},
+        "leaked_documents": len(leaked),
         "total_tokens": total,
         "shards": shards,
         "dir": os.path.abspath(out_dir),
