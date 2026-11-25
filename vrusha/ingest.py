@@ -66,6 +66,10 @@ def _profile_for(doc: Document, registry: Registry, detected_lang: str):
     return registry.maybe(detected_lang) or registry.get("en")
 
 
+class _Skip(Exception):
+    """A document that should be recorded as rejected, not treated as a crash."""
+
+
 def ingest_documents(
     docs: Sequence[Document],
     store: Store,
@@ -80,8 +84,8 @@ def ingest_documents(
 ) -> IngestReport:
     report = IngestReport()
     index = store.duplicate_index()
-    pending: List[tuple[int, str]] = []      # (chunk_id, text) awaiting embedding
     manifest_rows: List[Document] = []
+    dtype = cfg.get("store", {}).get("vector_dtype", "float32")
 
     for doc in docs:
         report.documents += 1
@@ -113,59 +117,77 @@ def ingest_documents(
             manifest_rows.append(doc)
             continue
 
-        doc_id = store.add_document(
-            url=doc.url,
-            title=doc.title,
-            text=doc.text,
-            domain=doc.domain,
-            kind=doc.kind,
-            lang=lang_code,
-            licence=doc.licence or licence,
-            retrieved=doc.retrieved,
-            status=doc.status,
-            content_hash=doc.content_hash,
-        )
-        if doc_id is None:
-            report.reject(doc, "already stored")
+        # Everything this document owns -- the row, its chunks, their
+        # signatures and their vectors -- is written inside one savepoint. If
+        # any step fails, the document leaves nothing behind: a row without
+        # chunks or chunks without vectors would be invisible to retrieval and
+        # would make `verify` fail on a store that is otherwise fine.
+        written = 0
+        try:
+            with store.transaction():
+                doc_id = store.add_document(
+                    url=doc.url,
+                    title=doc.title,
+                    text=doc.text,
+                    domain=doc.domain,
+                    kind=doc.kind,
+                    lang=lang_code,
+                    licence=doc.licence or licence,
+                    retrieved=doc.retrieved,
+                    status=doc.status,
+                    content_hash=doc.content_hash,
+                )
+                already = store.conn.execute(
+                    "SELECT COUNT(*) FROM chunks WHERE doc_id = ?", (doc_id,)).fetchone()[0]
+                if already:
+                    raise _Skip("already stored")
+
+                profile = _profile_for(doc, registry, lang_code)
+                chunks = chunk_text(doc.text, profile, cfg, url=doc.url)
+                if not chunks:
+                    raise _Skip("no chunks produced")
+
+                ids_and_text: List[tuple[int, str]] = []
+                for chunk in chunks:
+                    chunk_id = store.add_chunk(
+                        doc_id,
+                        chunk.text,
+                        kind=chunk.kind,
+                        symbol=chunk.symbol,
+                        lang=chunk.lang or lang_code,
+                        ordinal=chunk.ordinal,
+                        start_line=chunk.start_line,
+                        end_line=chunk.end_line,
+                    )
+                    signature = minhash_signature(chunk.text)
+                    store.set_signature(chunk_id, signature_hex(signature),
+                                        band_keys(signature))
+                    ids_and_text.append((chunk_id, chunk.text))
+
+                matrix = embedder.encode([text for _cid, text in ids_and_text])
+                if len(matrix) != len(ids_and_text):
+                    raise RuntimeError(
+                        f"embedder returned {len(matrix)} vectors for "
+                        f"{len(ids_and_text)} chunks")
+                for (chunk_id, _text), vector in zip(ids_and_text, matrix):
+                    store.set_vector(chunk_id, vector, dtype)
+                written = len(ids_and_text)
+        except _Skip as exc:
+            report.reject(doc, str(exc))
             manifest_rows.append(doc)
             continue
-
-        profile = _profile_for(doc, registry, lang_code)
-        chunks = chunk_text(doc.text, profile, cfg, url=doc.url)
-        if not chunks:
-            report.reject(doc, "no chunks produced")
+        except Exception as exc:
+            # the savepoint has already rolled the document back
+            report.reject(doc, f"write failed: {type(exc).__name__}: {exc}")
             manifest_rows.append(doc)
             continue
-
-        for chunk in chunks:
-            chunk_id = store.add_chunk(
-                doc_id,
-                chunk.text,
-                kind=chunk.kind,
-                symbol=chunk.symbol,
-                lang=chunk.lang or lang_code,
-                ordinal=chunk.ordinal,
-                start_line=chunk.start_line,
-                end_line=chunk.end_line,
-            )
-            signature = minhash_signature(chunk.text)
-            store.set_signature(chunk_id, signature_hex(signature), band_keys(signature))
-            pending.append((chunk_id, chunk.text))
-            report.chunks += 1
 
         report.stored += 1
+        report.chunks += written
+        report.embedded += written
         manifest_rows.append(doc)
         if verbose:
-            print(f"  stored {doc.url}  {len(chunks)} chunks")
-
-    # one embedding batch for the whole run
-    if pending:
-        texts = [text for _chunk_id, text in pending]
-        matrix = embedder.encode(texts)
-        dtype = cfg.get("store", {}).get("vector_dtype", "float32")
-        for (chunk_id, _text), vector in zip(pending, matrix):
-            store.set_vector(chunk_id, vector, dtype)
-        report.embedded = len(pending)
+            print(f"  stored {doc.url}  {written} chunks")
 
     store.commit()
 

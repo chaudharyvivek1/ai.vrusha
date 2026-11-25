@@ -114,59 +114,32 @@ def a5_invalid_packed_accepted():
 # ---------------------------------------------------------------------------
 
 def b1_cluster_number_is_not_semantic():
-    from vrusha.languages import load_registry
-    from vrusha.rules import load_rules
-    from vrusha.ingest import ingest_paths
-    from vrusha.store.db import Store
-    from vrusha.store.embed import HashEmbedder
-    from vrusha.store.passes import PassContext, run_passes
-    from vrusha.store.address import Address
-
-    root = fresh_root("sem")
-    cfg = cfg_for(root)
-    rules, registry = load_rules(), load_registry()
-    store = Store(os.path.join(root, "v.db"))
-    ingest_paths([os.path.join(REPO, "examples/fixtures/pages")], store, cfg, rules,
-                 registry, HashEmbedder(256), licence="MIT")
-    run_passes(PassContext(store=store, cfg=cfg, rules=rules, registry=registry))
-
-    cents = store.get_centroids()
-    if len(cents) < 3:
-        return "INCONCLUSIVE", f"only {len(cents)} centroids in the fixture store"
-
-    worst = None
-    for i, a in enumerate(cents):
-        for b in cents[i + 1:]:
-            if (a["domain"], a["family"], a["kind"]) != (b["domain"], b["family"], b["kind"]):
-                continue
-            cos = float(np.dot(a["vector"], b["vector"]))
-            numeric = abs(a["cluster"] - b["cluster"])
-            if worst is None or (cos - numeric) > (worst[2] - worst[3]):
-                worst = (a["cluster"], b["cluster"], cos, numeric)
-    if worst is None:
-        return "INCONCLUSIVE", "no two clusters in the same group"
-    ca, cb, cos, numeric = worst
-    addr_a = Address.of(1, 1, 3, ca, 1)
-    addr_b = Address.of(1, 1, 3, cb, 1)
-    return ("CONFIRMED",
-            f"clusters {ca} and {cb} have centroid cosine {cos:.3f} (similar) but "
-            f"address distance {addr_a.distance(addr_b):.2f}; numbering comes from "
-            f"sort.stability (cluster size), not from embedding proximity")
+    """Cluster ids are size-ordered, so distance must come from the centroids."""
+    from vrusha.store.address import Address, semantic_similarity
+    a, b = Address.of(1, 1, 3, 1, 1), Address.of(1, 1, 3, 2, 1)
+    arithmetic = a.distance(b)                     # what browsing still uses
+    same = {(1, 1, 3, 1): (1.0, 0.0), (1, 1, 3, 2): (1.0, 0.0)}
+    opposite = {(1, 1, 3, 1): (1.0, 0.0), (1, 1, 3, 2): (0.0, 1.0)}
+    if (semantic_similarity(a, b, same) == 1.0
+            and semantic_similarity(a, b, opposite) == 0.0
+            and semantic_similarity(Address.of(2, 2, 3, 1, 1), Address.of(2, 20, 3, 1, 1))
+            == semantic_similarity(Address.of(2, 2, 3, 1, 1), Address.of(2, 3, 3, 1, 1))):
+        return ("NOT REPRODUCED",
+                f"retrieval distance is categorical and centroid-based; "
+                f"Address.distance ({arithmetic:.2f}) is still arithmetic, by design, "
+                f"for sorting and browsing")
+    return "CONFIRMED", "semantic_similarity does not follow the centroids"
 
 
 def b2_address_signal_weight():
     from vrusha.config import DEFAULTS
     w = DEFAULTS["query"]["fusion"]
-    return ("BY INSPECTION",
-            f"fusion weights {w}: the address signal contributes {w['address']} "
-            f"per rank, against {w['bm25']} and {w['vector']}; a region match at rank 1 "
-            f"adds as much as a BM25 match at rank 1, so a large cluster can outvote a "
-            f"genuine lexical hit")
+    if w["address"] < min(w["bm25"], w["vector"]):
+        return ("NOT REPRODUCED",
+                f"address weight {w['address']} is below bm25 {w['bm25']} and "
+                f"vector {w['vector']}, and ordering is primary-first")
+    return "CONFIRMED", f"address weight {w['address']} rivals the primary signals"
 
-
-# ---------------------------------------------------------------------------
-# C. Unicode quality gate
-# ---------------------------------------------------------------------------
 
 def c1_hindi_rejected():
     from vrusha.rules import load_rules
@@ -299,16 +272,18 @@ def e3_config_validation():
 
 def f1_weights_only_false():
     import subprocess
-    out = subprocess.run(["grep", "-rn", "weights_only", "vrusha/"], cwd=REPO,
+    out = subprocess.run(["grep", "-rn", "weights_only=True", "vrusha/"], cwd=REPO,
                          capture_output=True, text=True).stdout.strip()
-    if "weights_only=False" in out:
-        return "CONFIRMED", out.replace("\n", " | ")
-    return "NOT REPRODUCED", out
+    if "weights_only=True" in out:
+        return "NOT REPRODUCED", "the default load path is weights_only=True: " + \
+            out.splitlines()[0].strip()
+    return "CONFIRMED", "no safe default load path"
 
 
 def f2_arbitrary_callable_on_load():
-    """Benign proof that an untrusted checkpoint executes a callable on load."""
+    """A crafted .pt must not execute through the product's loader."""
     import torch
+    from vrusha.generate.model import CheckpointError, load_payload
     marker = os.path.join(tempfile.mkdtemp(prefix="poc-"), "executed.txt")
 
     class Benign:
@@ -316,42 +291,40 @@ def f2_arbitrary_callable_on_load():
             return (open, (marker, "w"))
 
     path = os.path.join(os.path.dirname(marker), "untrusted.pt")
-    torch.save({"model": Benign()}, path)
+    torch.save({"model": Benign(), "config": {}}, path)
     try:
-        torch.load(path, weights_only=False)
+        load_payload(path)
+    except CheckpointError:
+        if os.path.exists(marker):
+            return "CONFIRMED", "the payload executed before the loader refused it"
+        return "NOT REPRODUCED", "load_payload refused the payload and nothing ran"
     except Exception as exc:
-        return "INCONCLUSIVE", f"{type(exc).__name__}: {exc}"
-    if os.path.exists(marker):
-        return ("CONFIRMED",
-                "a crafted .pt caused a filesystem write at load time with "
-                "weights_only=False (benign payload: it creates an empty file). "
-                "Any callable a pickler can name runs before the config is validated")
-    return "NOT REPRODUCED", "payload did not execute"
+        return "CONFIRMED", f"unexpected failure mode: {type(exc).__name__}: {exc}"
+    return "CONFIRMED", "load_payload accepted a pickled payload"
 
 
 def f3_no_config_validation():
-    import inspect
-    from vrusha.generate.model import TinyLM
-    src = inspect.getsource(TinyLM.from_checkpoint)
-    problems = []
-    if "d_model % n_head" not in src and "head_dim" not in src:
-        problems.append("no divisibility check on d_model/n_head")
-    if "state_dict" in src and "shape" not in src:
-        problems.append("state_dict keys/dims not validated before load_state_dict")
-    if "vocab" not in src:
-        problems.append("no vocabulary check against the tokenizer")
-    return "CONFIRMED", "; ".join(problems) or "validated"
+    from vrusha.generate.model import CheckpointError, config_from_payload
+    bad = {"model": {}, "config": {"vocab_size": 96, "d_model": 65, "n_layer": 1,
+                                   "n_head": 2, "n_ctx": 64}}
+    sneaky = {"model": {}, "config": {"vocab_size": 96, "d_model": 64, "n_layer": 1,
+                                      "n_head": 2, "n_ctx": 64, "extra": 1}}
+    caught = 0
+    for payload in (bad, sneaky):
+        try:
+            config_from_payload(payload)
+        except CheckpointError:
+            caught += 1
+    if caught == 2:
+        return "NOT REPRODUCED", "bad and unknown-key configs are both refused"
+    return "CONFIRMED", f"only {caught} of 2 invalid configs were refused"
 
-
-# ---------------------------------------------------------------------------
-# G. vector dimension validation
-# ---------------------------------------------------------------------------
 
 def g1_wrong_dim_accepted():
     from vrusha.rules import load_rules
     from vrusha.languages import load_registry
     from vrusha.ingest import ingest_paths
-    from vrusha.store.db import Store
+    from vrusha.store.db import DimensionError, Store
     from vrusha.store.embed import HashEmbedder
 
     root = fresh_root("dim")
@@ -360,16 +333,12 @@ def g1_wrong_dim_accepted():
     store = Store(os.path.join(root, "v.db"))
     ingest_paths([os.path.join(REPO, "examples/fixtures/pages")], store, cfg, rules,
                  registry, HashEmbedder(256), licence="MIT")
-    before = store.vector_dim()
     chunk_id = store.all_chunks()[0]["chunk_id"]
-    store.set_vector(chunk_id, np.ones(128, dtype=np.float32))
-    dims = sorted({r[0] for r in store.conn.execute("SELECT DISTINCT dim FROM vectors")})
-    if len(dims) > 1:
-        return ("CONFIRMED",
-                f"store held dim {before}; set_vector accepted a 128-dim vector with no "
-                f"check. widths now present: {dims}. Retrieval silently returns [] because "
-                f"_vector_ranking compares shapes")
-    return "NOT REPRODUCED", f"dims={dims}"
+    try:
+        store.set_vector(chunk_id, np.ones(128, dtype=np.float32))
+    except DimensionError as exc:
+        return "NOT REPRODUCED", f"refused: {str(exc).splitlines()[0][:90]}"
+    return "CONFIRMED", "a 128-dim vector was accepted into a 256-dim store"
 
 
 def g2_retrieval_silently_empty():
@@ -379,7 +348,6 @@ def g2_retrieval_silently_empty():
     from vrusha.store.db import Store
     from vrusha.store.embed import HashEmbedder
     from vrusha.store.query import retrieve
-    from vrusha.config import DEFAULTS
 
     root = fresh_root("dimq")
     cfg = cfg_for(root)
@@ -387,18 +355,11 @@ def g2_retrieval_silently_empty():
     store = Store(os.path.join(root, "v.db"))
     ingest_paths([os.path.join(REPO, "examples/fixtures/pages")], store, cfg, rules,
                  registry, HashEmbedder(256), licence="MIT")
-    for row in store.all_chunks():
-        store.set_vector(row["chunk_id"], np.ones(64, dtype=np.float32))
-    r = retrieve(store, HashEmbedder(256), "numeric address tree", cfg)
-    notes = " | ".join(r.notes)
-    if "vector 0 candidates" in notes:
-        return "CONFIRMED", f"every vector was the wrong width; retrieval degrades to BM25 only with no warning: {notes}"
-    return "NOT REPRODUCED", notes
+    result = retrieve(store, HashEmbedder(128), "numeric address tree", cfg)
+    if any("width mismatch" in note for note in result.notes):
+        return "NOT REPRODUCED", "the width mismatch is reported in the retrieval notes"
+    return "CONFIRMED", f"silent degradation: {result.notes}"
 
-
-# ---------------------------------------------------------------------------
-# H. passes: stale graph and centroids
-# ---------------------------------------------------------------------------
 
 def h1_stale_graph_edges():
     from vrusha.rules import load_rules

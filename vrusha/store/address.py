@@ -317,6 +317,62 @@ class Address:
         }
 
 
+def _dot(u, v) -> float:
+    return sum(float(x) * float(y) for x, y in zip(u, v))
+
+
+def semantic_similarity(a: Address, b: Address, centroids=None) -> float:
+    """How close two addresses are *in meaning*, from 0 to 1.
+
+    `Address.distance` is arithmetic: it subtracts segment values. That is the
+    right thing for sorting, browsing and rendering, and the wrong thing for
+    retrieval, because the segments are not all numbers of the same kind.
+
+    - domain, family and kind are **labels**. Family 2 and family 3 are not
+      "closer" than family 2 and family 20; they are just different. A
+      mismatch is a fixed penalty, never a difference.
+    - cluster is a label too, but one we can measure: `centroids` maps
+      (domain, family, kind, cluster) to that cluster's mean vector, and the
+      cosine between two of them is a real answer to "are these about the same
+      thing". Cluster ids are ordered by size, so `|1 - 2|` says nothing.
+    - ordinal is a position inside one cluster, so it only carries meaning
+      when the clusters match, and then only weakly.
+
+    `centroids` is a dict of (domain, family, kind, cluster) -> vector. When it
+    is missing, two different clusters score a neutral 0.6 rather than a
+    number invented from their ids.
+    """
+    if a.segments == b.segments:
+        return 1.0
+    if a.segments[0] != b.segments[0]:
+        return 0.0
+    if a.segments[1] != b.segments[1]:
+        return 0.25
+    if a.segments[2] != b.segments[2]:
+        return 0.5
+
+    if a.cluster == b.cluster:
+        score = 1.0
+    else:
+        table = centroids or {}
+        left = table.get(a.segments[:4])
+        right = table.get(b.segments[:4])
+        if left is None or right is None:
+            score = 0.6
+        else:
+            score = max(0.0, min(1.0, _dot(left, right)))
+
+    if a.cluster == b.cluster and a.ordinal and b.ordinal:
+        score /= 1.0 + 0.02 * abs(a.ordinal - b.ordinal)
+    return score
+
+
+def centroid_table(rows) -> dict:
+    """Turn `Store.get_centroids()` rows into the mapping above."""
+    return {(r["domain"], r["family"], r["kind"], r["cluster"]): r["vector"]
+            for r in rows}
+
+
 def compose(domain: int, family: int, kind: int, cluster: int = 0, ordinal: int = 0) -> Address:
     """Build an address from its five named parts."""
     return Address((domain, family, kind, cluster, ordinal))

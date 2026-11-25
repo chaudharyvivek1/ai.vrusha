@@ -106,10 +106,21 @@ def train(
 
     start_step = 0
     if resume and os.path.exists(resume):
-        payload = torch.load(resume, map_location=device, weights_only=False)
+        # Same safe path as inference: a resume file is a checkpoint, and a
+        # checkpoint is untrusted input until it has been validated.
+        from .model import config_from_payload, load_payload, validate_state_dict
+
+        payload = load_payload(resume, map_location=str(device))
+        stored = config_from_payload(payload)
+        if (stored.d_model, stored.n_layer, stored.n_head, stored.vocab_size) != \
+                (config.d_model, config.n_layer, config.n_head, config.vocab_size):
+            raise ValueError(
+                f"{resume} was trained as a different model "
+                f"(d_model={stored.d_model}, n_layer={stored.n_layer}, "
+                f"n_head={stored.n_head}, vocab={stored.vocab_size}); "
+                f"resume needs the same preset and tokenizer")
+        validate_state_dict(model, payload["model"])
         model.load_state_dict(payload["model"])
-        if "optimizer" in payload:
-            optimizer.load_state_dict(payload["optimizer"])
         start_step = int(payload.get("step", 0))
 
     train_iter = batch_iterator(train_shards, dtype, train_cfg.batch_size,

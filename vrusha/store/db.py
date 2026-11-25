@@ -26,6 +26,7 @@ import hashlib
 import json
 import os
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -160,6 +161,16 @@ END;
 
 def now_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class DimensionError(ValueError):
+    """A vector does not match the width this store was built with.
+
+    Mixing widths does not corrupt anything -- every vector keeps its own
+    dimension in its row -- but retrieval compares shapes and silently drops
+    the whole vector signal. Failing loudly at write time is the only way that
+    stays visible.
+    """
 
 
 def url_hash(url: str) -> str:
@@ -319,11 +330,40 @@ class Store:
         )
         return int(cursor.lastrowid)
 
+    def embed_dim(self) -> Optional[int]:
+        """The width this store was built with, or None before the first vector."""
+        row = self.conn.execute("SELECT value FROM meta WHERE key='embed_dim'").fetchone()
+        return int(row[0]) if row else None
+
     def set_vector(self, chunk_id: int, vector: np.ndarray, dtype: str = "float32") -> None:
-        blob, dtype_name, dim = pack(vector, dtype)
+        """Store one vector, refusing a width that does not match the store."""
+        array = np.asarray(vector, dtype=np.float32).ravel()
+        if array.size == 0:
+            raise DimensionError(f"chunk {chunk_id}: empty vector")
+        if not np.all(np.isfinite(array)):
+            raise DimensionError(f"chunk {chunk_id}: vector contains NaN or infinity")
+        expected = self.embed_dim()
+        if expected is None:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES('embed_dim', ?)",
+                (str(int(array.size)),))
+        elif int(array.size) != expected:
+            raise DimensionError(
+                f"chunk {chunk_id}: vector has {array.size} dimensions but this store "
+                f"was built with {expected}. Re-embed the whole store with one model "
+                f"(`vrusha ingest` after `store.clear_vectors()`), or point the config at "
+                f"the embedder that produced the stored vectors.")
+        blob, dtype_name, dim = pack(array, dtype)
         self.conn.execute(
             "INSERT OR REPLACE INTO vectors(chunk_id, dim, dtype, blob) VALUES (?,?,?,?)",
             (chunk_id, dim, dtype_name, blob))
+
+    def clear_vectors(self) -> int:
+        """Drop every vector and the recorded width. The documented re-embed path."""
+        removed = int(self.conn.execute("SELECT COUNT(*) FROM vectors").fetchone()[0])
+        self.conn.execute("DELETE FROM vectors")
+        self.conn.execute("DELETE FROM meta WHERE key='embed_dim'")
+        return removed
 
     def get_vectors(self, chunk_ids: Optional[Sequence[int]] = None) -> Tuple[List[int], np.ndarray]:
         if chunk_ids is None:
@@ -510,6 +550,26 @@ class Store:
     def commit(self) -> None:
         self.conn.commit()
 
+    @contextmanager
+    def transaction(self):
+        """All-or-nothing around a group of writes.
+
+        A SAVEPOINT nests inside the connection's implicit transaction, so a
+        failure rolls back only what this block wrote and leaves the rest of
+        the run intact. Used by ingestion so a document cannot survive as
+        rows without chunks or chunks without vectors.
+        """
+        name = "vrusha_tx"
+        self.conn.execute(f"SAVEPOINT {name}")
+        try:
+            yield self
+        except BaseException:
+            self.conn.execute(f"ROLLBACK TO SAVEPOINT {name}")
+            self.conn.execute(f"RELEASE SAVEPOINT {name}")
+            raise
+        else:
+            self.conn.execute(f"RELEASE SAVEPOINT {name}")
+
     def stats(self) -> dict:
         docs = self.document_count()
         chunks = self.chunk_count()
@@ -535,5 +595,6 @@ class Store:
             "languages": {(r[0] or "?"): int(r[1]) for r in langs},
             "licences": {(r[0] or "unknown"): int(r[1]) for r in licences},
             "vector_dim": self.vector_dim(),
+            "embed_dim": self.embed_dim(),
             "path": os.path.abspath(self.path),
         }

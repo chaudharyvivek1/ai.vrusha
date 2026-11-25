@@ -71,6 +71,35 @@ def run_verify(store: Store) -> List[dict]:
     results.append(_result("all vectors share one width", len(dims) <= 1,
                            f"widths present: {sorted(dims) or 'none'}"))
 
+    recorded = store.embed_dim()
+    consistent = recorded is None or dims <= {recorded}
+    results.append(_result(
+        "vectors match the recorded embedding width", consistent,
+        f"recorded {recorded}, present {sorted(dims) or 'none'}"
+        + ("" if consistent else "; re-embed with `store.clear_vectors()` then re-ingest")))
+
+    live_clusters = {
+        (r[0], r[1], r[2], r[3]) for r in conn.execute(
+            "SELECT DISTINCT addr_domain, addr_family, addr_kind, addr_cluster "
+            "FROM chunks WHERE active=1 AND addr_cluster IS NOT NULL").fetchall()
+    }
+    stored_clusters = {
+        (r[0], r[1], r[2], r[3]) for r in conn.execute(
+            "SELECT domain, family, kind, cluster FROM centroids").fetchall()
+    }
+    stale_centroids = stored_clusters - live_clusters
+    results.append(_result(
+        "centroids describe the live clustering", not stale_centroids,
+        f"{len(stale_centroids)} centroid(s) for clusters that no longer exist"
+        + ("" if not stale_centroids else "; run `vrusha passes --only analyse.centroid`")))
+
+    merged_ok = conn.execute(
+        "SELECT COUNT(*) FROM chunks WHERE active=0 AND merged_into IS NOT NULL "
+        "AND merged_into != 0 AND merged_into NOT IN (SELECT chunk_id FROM chunks)"
+    ).fetchone()[0]
+    results.append(_result("merged_into points at a real chunk", merged_ok == 0,
+                           f"{merged_ok} dangling merge reference(s)"))
+
     orphans = conn.execute(
         "SELECT COUNT(*) FROM chunks c LEFT JOIN documents d ON d.doc_id = c.doc_id "
         "WHERE d.doc_id IS NULL").fetchone()[0]

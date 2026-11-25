@@ -40,6 +40,11 @@ def generate_text(
             "no tokenizer for this checkpoint; pass --tokenizer (the .pt stores "
             "the path it was trained with, which may have moved)")
     tokenizer = Tokenizer.load(tokenizer_path)
+    if tokenizer.vocab_size != model.cfg.vocab_size:
+        raise ValueError(
+            f"tokenizer has {tokenizer.vocab_size} tokens but the checkpoint was "
+            f"trained with a vocabulary of {model.cfg.vocab_size}; generation would "
+            f"produce ids the model has never seen")
 
     if seed is not None:
         torch.manual_seed(seed)

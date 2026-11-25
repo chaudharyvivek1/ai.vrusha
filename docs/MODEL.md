@@ -76,6 +76,30 @@ changes between the two.
 
 ## The checkpoint
 
+A `.pt` is a pickle. Restoring one with `weights_only=False` runs whatever
+callable the file names, so a checkpoint you did not write is untrusted input --
+and checkpoints travel: they are downloaded, copied between machines, put in a
+Drive folder.
+
+Loading is therefore safe by default and validated before a single weight is
+used:
+
+- `weights_only=True`, so no callable can run at load time;
+- the stored config is checked against `ModelConfig` (unknown keys, missing
+  keys, non-positive dimensions, `d_model % n_head`, an even head dimension);
+- every state-dict key must exist and every tensor must have the shape the
+  model expects;
+- `--resume` applies the same checks and refuses a checkpoint trained with a
+  different preset or vocabulary;
+- generation refuses a tokenizer whose vocabulary size differs from the
+  checkpoint's.
+
+An old file that cannot be read safely raises `CheckpointError` with the fix
+rather than falling back to unrestricted loading. `allow_pickle=True` exists in
+the Python API for a file you wrote yourself; it is never automatic.
+
+## What the checkpoint holds
+
 `save_checkpoint` writes the weights, the model config and the step. It does
 **not** write the optimizer state, so `--resume` restarts the schedule rather
 than continuing it exactly. For runs long enough that this matters, extend the

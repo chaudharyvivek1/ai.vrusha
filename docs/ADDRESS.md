@@ -119,6 +119,39 @@ This matters in practice: `assign.address` writes one ordinal per chunk inside
 a cluster, and a cluster with more than 99 chunks is ordinary. Before this
 rule the parser refused every such address and the pass pipeline raised.
 
+## Distance, and distance-for-retrieval
+
+`Address.distance` is arithmetic: it subtracts segment values with halving
+weights. That is the right thing for **sorting, browsing and rendering**, and
+it is what makes a prefix a folder.
+
+It is the wrong thing for **retrieval**, because the segments are not all
+numbers of the same kind. Cluster ids are assigned by cluster *size*
+(`sort.stability`), so cluster 1 and cluster 2 are the two biggest topics, not
+two neighbouring ones. `|1 - 2|` carries no meaning.
+
+`semantic_similarity(a, b, centroids)` is what retrieval uses:
+
+| relationship | score |
+|---|---|
+| same address | 1.00 |
+| different domain | 0.00 |
+| same domain, different family | 0.25 |
+| same family, different kind | 0.50 |
+| same kind, different cluster | cosine of the two cluster centroids |
+| same cluster, different ordinal | 1.0 scaled down by the ordinal gap |
+
+Domain, family and kind are **labels**: family 2 is exactly as far from family 3
+as it is from family 20. The cluster term is measured from the stored centroids,
+so two clusters that are actually about the same thing score high however they
+happen to be numbered. With no centroids available the score is a neutral 0.6,
+never a number invented from the ids.
+
+The address signal also enters fusion as a **tiebreaker**, not as evidence:
+hits are ordered by `(has lexical or semantic support, primary score, total)`,
+so a region hint can reorder hits with equal evidence and can never displace a
+hit the text actually matched.
+
 ## How an address is assigned
 
 Only the `assign.address` pass writes an address, and it writes one from four

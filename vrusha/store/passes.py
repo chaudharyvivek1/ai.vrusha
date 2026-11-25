@@ -340,6 +340,20 @@ def analyse_centroid(ctx: PassContext) -> dict:
         "WHERE active=1 AND addr_cluster IS NOT NULL").fetchall()
     if not rows:
         return {"centroids": 0}
+    # The centroid table must describe the current clustering and nothing else.
+    # A stale centroid is worse than a missing one: it answers questions about
+    # a partition that no longer exists.
+    live_keys = {(int(r["addr_domain"]), int(r["addr_family"]), int(r["addr_kind"]),
+                  int(r["addr_cluster"])) for r in rows}
+    stale = [
+        (c["domain"], c["family"], c["kind"], c["cluster"])
+        for c in ctx.store.get_centroids()
+        if (c["domain"], c["family"], c["kind"], c["cluster"]) not in live_keys
+    ]
+    for domain, family, kind, cluster in stale:
+        ctx.store.conn.execute(
+            "DELETE FROM centroids WHERE domain=? AND family=? AND kind=? AND cluster=?",
+            (domain, family, kind, cluster))
     ids = [int(r["chunk_id"]) for r in rows]
     vec_ids, matrix = ctx.store.get_vectors(ids)
     position = {chunk_id: i for i, chunk_id in enumerate(vec_ids)}
@@ -359,7 +373,7 @@ def analyse_centroid(ctx: PassContext) -> dict:
         ctx.store.set_centroid(int(domain), int(family), int(kind), int(cluster),
                                centre.astype(np.float32), len(usable))
         written += 1
-    return {"centroids": written, "clusters": len(buckets)}
+    return {"centroids": written, "clusters": len(buckets), "pruned": len(stale)}
 
 
 @pass_("sort.stability", 5, "order clusters by size so the biggest gets cluster 1")
@@ -438,6 +452,13 @@ def reflow_address(ctx: PassContext) -> dict:
 
 @pass_("analyse.graph", 8, "connect every chunk to its nearest neighbours")
 def analyse_graph(ctx: PassContext) -> dict:
+    """Rebuild the whole near-neighbour graph, replacing what was there.
+
+    The graph is a function of the current vectors and the current k. Adding
+    edges without clearing the old ones makes it a function of every k the
+    store has ever been run with, which is not a graph anyone can reason
+    about -- and `verify` cannot see the difference.
+    """
     k = int(ctx.cfg.get("passes", {}).get("graph_neighbours", 5))
     rows = ctx.store.conn.execute(
         "SELECT chunk_id FROM chunks WHERE active=1 ORDER BY chunk_id").fetchall()
@@ -445,6 +466,11 @@ def analyse_graph(ctx: PassContext) -> dict:
     vec_ids, matrix = ctx.store.get_vectors(ids)
     if not vec_ids:
         return {"edges": 0, "note": "no vectors"}
+
+    replaced = int(ctx.store.conn.execute(
+        "SELECT COUNT(*) FROM edges WHERE kind='near'").fetchone()[0])
+    ctx.store.conn.execute("DELETE FROM edges WHERE kind='near'")
+
     edges = 0
     for index, chunk_id in enumerate(vec_ids):
         similarity = matrix @ matrix[index]
@@ -461,7 +487,7 @@ def analyse_graph(ctx: PassContext) -> dict:
             if added >= k:
                 break
         edges += added
-    return {"edges": edges, "k": k, "chunks": len(vec_ids)}
+    return {"edges": edges, "replaced": replaced, "k": k, "chunks": len(vec_ids)}
 
 
 @pass_("link.parent", 5, "point every chunk at the representative of its parent region")
@@ -469,6 +495,11 @@ def link_parent(ctx: PassContext) -> dict:
     rows = ctx.store.conn.execute(
         "SELECT chunk_id, address FROM chunks WHERE active=1 AND address IS NOT NULL "
         "ORDER BY address").fetchall()
+    # Rebuilt from scratch: a parent link that survived a reflow would point at
+    # a chunk that is no longer the representative of that region.
+    replaced = int(ctx.store.conn.execute(
+        "SELECT COUNT(*) FROM edges WHERE kind='child_of'").fetchone()[0])
+    ctx.store.conn.execute("DELETE FROM edges WHERE kind='child_of'")
     by_prefix: Dict[str, int] = {}
     linked = 0
     for r in rows:
@@ -480,7 +511,7 @@ def link_parent(ctx: PassContext) -> dict:
         elif representative != int(r["chunk_id"]):
             ctx.store.add_edge(int(r["chunk_id"]), representative, "child_of", 1.0)
             linked += 1
-    return {"linked": linked, "regions": len(by_prefix)}
+    return {"linked": linked, "regions": len(by_prefix), "replaced": replaced}
 
 
 # --------------------------------------------------------------------------

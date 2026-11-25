@@ -34,6 +34,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+class CheckpointError(RuntimeError):
+    """A checkpoint is unreadable, unsafe or inconsistent with the model code."""
+
+
+#: Keys a checkpoint config may contain. Anything else is a sign the file was
+#: not written by this code, and guessing is how you get a silent wrong model.
+CONFIG_FIELDS = {"vocab_size", "d_model", "n_layer", "n_head", "n_ctx",
+                 "dropout", "tie_embeddings"}
+
+
 PRESETS: Dict[str, dict] = {
     "tiny":  {"d_model": 64,  "n_layer": 2, "n_head": 2, "n_ctx": 256, "dropout": 0.0},
     "6m":    {"d_model": 192, "n_layer": 6, "n_head": 6, "n_ctx": 256, "dropout": 0.0},
@@ -238,13 +248,104 @@ class TinyLM(nn.Module):
         return path
 
     @classmethod
-    def from_checkpoint(cls, path: str, map_location: str = "cpu") -> Tuple["TinyLM", dict]:
-        payload = torch.load(path, map_location=map_location, weights_only=False)
-        cfg = ModelConfig(**payload["config"])
+    def from_checkpoint(cls, path: str, map_location: str = "cpu",
+                        allow_pickle: bool = False) -> Tuple["TinyLM", dict]:
+        """Load a checkpoint, validating it before a single weight is used.
+
+        `weights_only=True` is the default because a `.pt` is a pickle, and a
+        pickle restored with `weights_only=False` runs whatever callable it
+        names. Checkpoints travel: they are downloaded, copied between
+        machines, shared. A checkpoint you did not write is untrusted input.
+
+        `allow_pickle=True` exists for a file written by an older build and is
+        never the default.
+        """
+        payload = load_payload(path, map_location=map_location, allow_pickle=allow_pickle)
+        cfg = config_from_payload(payload)
         model = cls(cfg)
-        model.load_state_dict(payload["model"])
+        state = payload["model"]
+        validate_state_dict(model, state)
+        model.load_state_dict(state)
         model.eval()
         return model, payload
+
+
+def load_payload(path: str, map_location: str = "cpu", allow_pickle: bool = False) -> dict:
+    """Read a checkpoint payload without restoring arbitrary objects.
+
+    Raises CheckpointError rather than a bare traceback, and never falls back
+    to unrestricted pickle loading on its own.
+    """
+    if not os.path.exists(path):
+        raise CheckpointError(f"no checkpoint at {path}")
+    try:
+        payload = torch.load(path, map_location=map_location, weights_only=True)
+    except Exception as exc:
+        if allow_pickle:
+            payload = torch.load(path, map_location=map_location, weights_only=False)
+        else:
+            raise CheckpointError(
+                f"{path} cannot be read safely ({type(exc).__name__}: {exc}).\n"
+                f"It was probably written by an older build. Loading it with "
+                f"pickle enabled would execute whatever the file names, so that "
+                f"is opt-in only: re-save it with `TinyLM.save_checkpoint`, or "
+                f"pass allow_pickle=True if you wrote the file yourself."
+            ) from exc
+    if not isinstance(payload, dict) or "model" not in payload or "config" not in payload:
+        raise CheckpointError(
+            f"{path} is not a Vrusha checkpoint: expected a dict with 'model' and 'config'")
+    return payload
+
+
+def config_from_payload(payload: dict) -> ModelConfig:
+    """Validate the stored config before it is used to build anything."""
+    raw = payload.get("config")
+    if not isinstance(raw, dict):
+        raise CheckpointError("checkpoint config is not a mapping")
+    unknown = set(raw) - CONFIG_FIELDS
+    if unknown:
+        raise CheckpointError(f"checkpoint config has unknown keys: {sorted(unknown)}")
+    missing = {"vocab_size", "d_model", "n_layer", "n_head", "n_ctx"} - set(raw)
+    if missing:
+        raise CheckpointError(f"checkpoint config is missing: {sorted(missing)}")
+    try:
+        cfg = ModelConfig(**raw)
+    except TypeError as exc:
+        raise CheckpointError(f"checkpoint config is invalid: {exc}") from exc
+    if cfg.vocab_size <= 0 or cfg.d_model <= 0 or cfg.n_layer <= 0 or cfg.n_head <= 0:
+        raise CheckpointError("checkpoint config has a non-positive dimension")
+    if cfg.d_model % cfg.n_head:
+        raise CheckpointError(
+            f"d_model {cfg.d_model} is not divisible by n_head {cfg.n_head}")
+    if cfg.head_dim % 2:
+        raise CheckpointError(
+            f"head dimension {cfg.head_dim} must be even for RoPE")
+    if cfg.n_ctx <= 0:
+        raise CheckpointError("n_ctx must be positive")
+    return cfg
+
+
+def validate_state_dict(model: TinyLM, state: dict) -> None:
+    """Every key present, every tensor the shape the model expects."""
+    if not isinstance(state, dict):
+        raise CheckpointError("checkpoint 'model' entry is not a state dict")
+    expected = model.state_dict()
+    missing = set(expected) - set(state)
+    if missing:
+        raise CheckpointError(
+            f"checkpoint is missing {len(missing)} tensor(s), e.g. {sorted(missing)[:3]}")
+    extra = set(state) - set(expected)
+    if extra:
+        raise CheckpointError(
+            f"checkpoint has {len(extra)} unexpected tensor(s), e.g. {sorted(extra)[:3]}")
+    for key, tensor in state.items():
+        want = expected[key]
+        if not torch.is_tensor(tensor):
+            raise CheckpointError(f"{key} is not a tensor")
+        if tuple(tensor.shape) != tuple(want.shape):
+            raise CheckpointError(
+                f"{key}: shape {tuple(tensor.shape)} but the model expects "
+                f"{tuple(want.shape)}")
 
 
 def build_model(cfg: ModelConfig) -> TinyLM:

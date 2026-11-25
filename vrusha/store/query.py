@@ -23,7 +23,7 @@ from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
-from .address import Address
+from .address import Address, centroid_table, semantic_similarity
 from .db import Store
 
 _ADDRESS_IN_QUERY = re.compile(r"\b\d{1,2}(?:\.\d{1,8}){1,4}\b")
@@ -126,10 +126,19 @@ def _vector_ranking(store: Store, embedder, query: str, limit: int,
 
 
 def _address_ranking(store: Store, hint: Address, limit: int) -> List[tuple[int, float]]:
+    """Rank by meaning, not by subtracting segment numbers.
+
+    Cluster ids are assigned by cluster *size* (`sort.stability`), so cluster 1
+    and cluster 2 are the two biggest topics, not two neighbouring ones. The
+    centroids are the only thing in the store that knows which clusters are
+    actually about the same thing.
+    """
+    centroids = centroid_table(store.get_centroids())
     scored = []
     for chunk_id, address in store.addresses():
-        distance = hint.distance(address)
-        scored.append((chunk_id, 1.0 / (1.0 + distance)))
+        score = semantic_similarity(hint, address, centroids)
+        if score > 0:
+            scored.append((chunk_id, score))
     scored.sort(key=lambda pair: (-pair[1], pair[0]))
     return scored[:limit]
 
@@ -176,6 +185,11 @@ def retrieve(store: Store, embedder, query: str, cfg: dict,
                 pass
 
     floor = float(query_cfg.get("min_vector_similarity", 0.05))
+    stored_dim, embedder_dim = store.vector_dim(), getattr(embedder, "dim", None)
+    if stored_dim and embedder_dim and int(stored_dim) != int(embedder_dim):
+        result.notes.append(
+            f"vector width mismatch: store {stored_dim}, embedder {embedder_dim} "
+            f"-- the vector signal is disabled; re-embed or fix store.embed_dim")
     bm25 = store.fts_search(query, limit=candidates)
     vector = _vector_ranking(store, embedder, query, candidates, floor=floor)
     result.notes.append(f"bm25 {len(bm25)} candidates, vector {len(vector)} candidates")
@@ -184,12 +198,24 @@ def retrieve(store: Store, embedder, query: str, cfg: dict,
         "bm25": [chunk_id for chunk_id, _ in bm25],
         "vector": [chunk_id for chunk_id, _ in vector],
     }
+    address_hits: List[tuple[int, float]] = []
     if address_hint is not None:
         address_hits = _address_ranking(store, address_hint, candidates)
         rankings["address"] = [chunk_id for chunk_id, _ in address_hits]
         result.notes.append(f"address {len(address_hits)} candidates near {address_hint}")
 
-    fused = _reciprocal_rank_fusion(rankings, weights)
+    # Two fusions, not one. `primary` is the evidence: the text matched, or the
+    # meaning matched. `tiebreak` is where the address puts things. Ordering on
+    # the sum of the two lets a region hint overturn a much better lexical hit,
+    # which is how a tiebreaker stops being a tiebreaker. Order is
+    # (has evidence, primary strength, total), so the address can only reorder
+    # hits whose evidence is equal.
+    primary = _reciprocal_rank_fusion(
+        {k: rankings[k] for k in ("bm25", "vector") if k in rankings}, weights)
+    tiebreak = (_reciprocal_rank_fusion({"address": rankings["address"]}, weights)
+                if "address" in rankings else {})
+    fused = {cid: primary.get(cid, 0.0) + tiebreak.get(cid, 0.0)
+             for cid in set(primary) | set(tiebreak)}
     if not fused:
         return result
 
@@ -218,6 +244,7 @@ def retrieve(store: Store, embedder, query: str, cfg: dict,
             licence=row["licence"],
             scores={
                 "fused": fused_score,
+                "primary": primary.get(chunk_id, 0.0),
                 "bm25": bm25_map.get(chunk_id, 0.0),
                 "vector": vector_map.get(chunk_id, 0.0),
             },
@@ -229,7 +256,16 @@ def retrieve(store: Store, embedder, query: str, cfg: dict,
             hit.scores["fused"] = fused_score * (1.0 + 0.25 * bonus)
         hits.append(hit)
 
-    hits.sort(key=lambda h: (-h.score, h.chunk_id))
+    # Evidence first, address second. A hit the address signal produced with no
+    # lexical or semantic support sorts below every hit that has some, and
+    # among supported hits the primary score decides -- the address only breaks
+    # a genuine tie.
+    def _rank(hit: "Hit"):
+        supported = hit.scores.get("primary", 0.0) > 0
+        return (0 if supported else 1, -hit.scores.get("primary", 0.0), -hit.score,
+                hit.chunk_id)
+
+    hits.sort(key=_rank)
     result.hits = hits[:top_k]
     return result
 

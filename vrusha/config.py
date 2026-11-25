@@ -86,7 +86,10 @@ DEFAULTS: Dict[str, Any] = {
     "query": {
         "top_k": 8,
         "candidates": 60,
-        "fusion": {"bm25": 1.0, "vector": 1.0, "address": 0.35},
+        # The address signal is a tiebreaker. At 0.35 it could outvote both
+        # primary signals together, which let a region hint replace a correct
+        # lexical hit.
+        "fusion": {"bm25": 1.0, "vector": 1.0, "address": 0.15},
         "min_score": 0.0,
         # below this cosine a vector hit is noise, not a near miss
         "min_vector_similarity": 0.05,
