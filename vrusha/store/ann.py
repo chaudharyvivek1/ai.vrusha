@@ -298,6 +298,10 @@ class AnnIndex:
                 "target_cell_size": target,
                 "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "fingerprint": [int(filled), int(max_id)],
+                #: O(1) freshness: the store bumps this on every vector write,
+                #: so `is_stale` never has to count the table
+                "rev": (int(store.vector_revision())
+                        if hasattr(store, "vector_revision") else None),
                 "build_seconds": round(time.time() - started, 2),
             },
         )
@@ -394,11 +398,18 @@ class AnnIndex:
         return [int(self.rows), int(self.meta.get("fingerprint", [0, 0])[1])]
 
     def is_stale(self, store) -> bool:
-        """True when the store has vectors this index has never seen.
+        """True when the store has moved on since this index was built.
 
         A stale index is worse than no index: it answers confidently from a
         corpus that no longer exists. Callers fall back to the exact scan.
+
+        Uses the store's revision counter, which is O(1). Counting the table
+        here cost 1.8 s per query at 200k rows, which made the index pointless.
+        Indexes built before the counter existed fall back to the fingerprint.
         """
+        rev = self.meta.get("rev")
+        if rev is not None:
+            return int(store.vector_revision()) != int(rev)
         total, max_id = store.vector_fingerprint()
         return self.fingerprint() != [int(total), int(max_id)]
 
