@@ -10,6 +10,7 @@ address is a lie.
 """
 from __future__ import annotations
 
+import re
 from typing import Dict, List
 
 from .store.address import Address
@@ -117,6 +118,109 @@ def run_verify(store: Store) -> List[dict]:
                            f"{blocked_licences} document(s)"))
 
     return results
+
+
+def _shingle_set(text: str, size: int = 5) -> set:
+    words = text.split()
+    if len(words) < size:
+        return {" ".join(words)} if words else set()
+    return {" ".join(words[i:i + size]) for i in range(len(words) - size + 1)}
+
+
+def refetch(store, cfg: dict, *, limit: int = 0, apply: bool = False,
+            verbose: bool = True) -> List[dict]:
+    """Is what we stored still true?
+
+    `run_verify` checks the store against itself. This checks it against the
+    web: the URL still resolves, the licence still says what it said, and the
+    text has not drifted away from the chunks we embedded.
+
+    Drift is measured on word shingles, not on length, because a page that
+    gained a cookie banner is not a page that changed its prices. A dry run by
+    default: `apply=True` updates `retrieved` and records a gone page's status.
+    """
+    from .harvest.fetch import Fetcher
+    from .harvest.gates import detect_licence
+
+    query = ("SELECT doc_id, url, title, text, licence, retrieved FROM documents "
+             "WHERE url LIKE 'http%' ORDER BY doc_id")
+    if limit:
+        query += f" LIMIT {int(limit)}"
+    documents = store.conn.execute(query).fetchall()
+    allow_private = bool((cfg.get("http", {}) or {}).get("allow_private", False))
+    fetcher = Fetcher(cfg, allow_private=allow_private)
+    report: List[dict] = []
+
+    for document in documents:
+        url = document["url"]
+        try:
+            fetched = fetcher.get(url)
+        except Exception as exc:                       # noqa: BLE001
+            report.append({"doc_id": int(document["doc_id"]), "url": url,
+                           "state": "error", "detail": str(exc)[:200]})
+            continue
+
+        if not fetched.ok:
+            # a 404 or 410 arrives as an error string, not a status: read the
+            # code back out of it so the operator sees 410, not 0
+            code = int(fetched.status or 0)
+            if not code:
+                found = re.search(r"HTTP (\d{3})", getattr(fetched, "error", "") or "")
+                code = int(found.group(1)) if found else 0
+            report.append({"doc_id": int(document["doc_id"]), "url": url,
+                           "state": "gone", "status": code,
+                           "action": "stop citing it"})
+            if apply:
+                store.conn.execute("UPDATE documents SET status = ? WHERE doc_id = ?",
+                                   (code, int(document["doc_id"])))
+            continue
+
+        before = _shingle_set(document["text"] or "")
+        after = _shingle_set(fetched.text or "")
+        overlap = len(before & after) / max(1, len(before | after))
+        licence_now = detect_licence(fetched.text or "")
+        licence_before = document["licence"]
+
+        if overlap >= 0.95:
+            state, action = "unchanged", "nothing"
+        elif overlap >= 0.70:
+            state, action = "drifted", "refresh retrieved, keep chunks"
+        else:
+            state, action = "rewritten", "re-chunk and re-embed"
+
+        if licence_before and licence_now and licence_before != licence_now:
+            state, action = "licence-changed", "re-run filter.policy"
+
+        report.append({"doc_id": int(document["doc_id"]), "url": url, "state": state,
+                       "status": fetched.status, "overlap": round(overlap, 3),
+                       "licence_before": licence_before, "licence_now": licence_now,
+                       "action": action})
+        if verbose:
+            print(f"  {state:<16} {overlap:>5.1%}  {url[:80]}")
+        if apply and state == "unchanged":
+            store.conn.execute(
+                "UPDATE documents SET retrieved = ? WHERE doc_id = ?",
+                (fetched.retrieved, int(document["doc_id"])))
+
+    if apply:
+        store.commit()
+    return report
+
+
+def format_refetch(report: List[dict]) -> str:
+    if not report:
+        return "no http documents to re-fetch"
+    counts: Dict[str, int] = {}
+    for entry in report:
+        counts[entry["state"]] = counts.get(entry["state"], 0) + 1
+    lines = [f"re-fetched {len(report)} document(s)"]
+    for state, count in sorted(counts.items(), key=lambda kv: -kv[1]):
+        lines.append(f"  {state:<16} {count}")
+    for entry in report:
+        if entry["state"] != "unchanged":
+            lines.append(f"  ! {entry['state']:<14} {entry.get('overlap', '-')}  "
+                         f"{entry['url'][:90]}")
+    return "\n".join(lines)
 
 
 def summarise(results: List[dict]) -> bool:

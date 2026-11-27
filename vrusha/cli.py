@@ -14,6 +14,9 @@
     vrusha dataset                build binary shards
     vrusha train                  train the model
     vrusha generate               sample from a checkpoint
+    vrusha extract --dir PATH     html tables and csv into typed rows
+    vrusha tables                 the extracted tables, and their schemas
+    vrusha verify --refetch       is what we stored still true?
     vrusha index build            the vector index: routed scan over int8
     vrusha index export           push the same chunks into RagForge
     vrusha backends               which engines are usable, and how fast
@@ -712,8 +715,86 @@ def cmd_serve(args, cfg, rules, registry) -> int:
     return 0
 
 
+def cmd_extract(args, cfg, rules, registry) -> int:
+    """Turn tables on disk into typed rows beside the chunks."""
+    from .store.records import extract_dir, extract_path
+
+    store = _open_store(cfg)
+    try:
+        if not args.dir:
+            print("extract: give --dir with html or csv files")
+            return 2
+        if args.dir and os.path.isfile(args.dir):
+            result = extract_path(store, args.dir, licence=args.licence,
+                                  dayfirst=not args.mdy, verbose=not args.json)
+        else:
+            result = extract_dir(store, args.dir, licence=args.licence,
+                                 dayfirst=not args.mdy, limit=args.limit,
+                                 verbose=not args.json)
+    finally:
+        store.close()
+
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    else:
+        print(f"\n  {result['files']} file(s), {result['tables']} table(s), "
+              f"{result['rows']} row(s), {result['rejected']} table(s) rejected")
+    return 0
+
+
+def cmd_tables(args, cfg, rules, registry) -> int:
+    """The extracted tables, or the rows of one of them."""
+    from .store.records import list_tables, table_rows
+
+    store = _open_store(cfg)
+    try:
+        if args.id:
+            rows = table_rows(store, args.id, limit=args.limit)
+            if args.json:
+                print(json.dumps(rows, indent=2, ensure_ascii=False, default=str))
+                return 0
+            if not rows:
+                print(f"no rows in table {args.id}")
+                return 0
+            columns = list(rows[0])
+            print("  " + "  ".join(f"{c[:18]:<18}" for c in columns))
+            for row in rows:
+                print("  " + "  ".join(f"{str(row.get(c, ''))[:18]:<18}" for c in columns))
+            return 0
+
+        tables = list_tables(store)
+        if args.json:
+            print(json.dumps(tables, indent=2, ensure_ascii=False, default=str))
+            return 0
+        if not tables:
+            print("no tables extracted yet: `vrusha extract --dir <path>`")
+            return 0
+        rows = [[str(t["table_id"]), t["name"][:28], str(t["rows"]), str(t["cols"]),
+                 f"{t['confidence']:.0%}",
+                 ", ".join(f"{c['name']}:{c['type']}" for c in t["columns"])[:60]]
+                for t in tables]
+        _print_table(rows, ["id", "name", "rows", "cols", "typed", "columns"])
+    finally:
+        store.close()
+    return 0
+
+
 def cmd_verify(args, cfg, rules, registry) -> int:
     from .verify import format_results, run_verify, summarise
+    if getattr(args, "refetch", False):
+        from .verify import format_refetch, refetch
+        store = _open_store(cfg)
+        try:
+            report = refetch(store, cfg, limit=args.limit, apply=args.apply,
+                             verbose=not args.json)
+        finally:
+            store.close()
+        if args.json:
+            print(json.dumps(report, indent=2, ensure_ascii=False, default=str))
+        else:
+            print(format_refetch(report))
+        return 0 if all(entry["state"] == "unchanged" for entry in report) else 1
+
     store = _open_store(cfg)
     results = run_verify(store)
     store.close()
@@ -876,7 +957,27 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", type=int, default=None)
     p.set_defaults(func=cmd_generate)
 
-    sub.add_parser("verify", parents=[common], help="quality control over the store").set_defaults(func=cmd_verify)
+    p = sub.add_parser("verify", parents=[common], help="quality control over the store")
+    p.add_argument("--refetch", action="store_true",
+                   help="re-fetch http sources and report drift, licence changes and 404s")
+    p.add_argument("--apply", action="store_true",
+                   help="write back: refresh retrieved timestamps and gone statuses")
+    p.add_argument("--limit", type=int, default=0)
+    p.set_defaults(func=cmd_verify)
+
+    p = sub.add_parser("extract", parents=[common],
+                       help="turn html tables and csv files into typed rows")
+    p.add_argument("--dir", default="", help="a file, or a directory of html/csv")
+    p.add_argument("--licence", default=None, help="SPDX id to record for these files")
+    p.add_argument("--limit", type=int, default=0, help="files to process")
+    p.add_argument("--mdy", action="store_true", help="month-first dates (US corpora)")
+    p.set_defaults(func=cmd_extract)
+
+    p = sub.add_parser("tables", parents=[common],
+                       help="list extracted tables, or dump one table's rows")
+    p.add_argument("--id", type=int, default=0)
+    p.add_argument("--limit", type=int, default=50)
+    p.set_defaults(func=cmd_tables)
 
     p = sub.add_parser("index", parents=[common],
                        help="build, inspect, export or drop the vector index")
