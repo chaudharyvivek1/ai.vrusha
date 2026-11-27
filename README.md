@@ -240,7 +240,10 @@ endpoint.
 | `dataset` | build binary shards |
 | `train` | train the model |
 | `generate` | sample from a checkpoint |
+| `extract --dir` | html tables and csv into typed rows — see [docs/EXTRACT.md](docs/EXTRACT.md) |
+| `tables` | the extracted tables, their schemas, and their rows |
 | `verify` | quality control over the store |
+| `verify --refetch` | is what we stored still true? drift, licence, 404s |
 | `index build\|stats\|drop` | the vector index — see [docs/ANN.md](docs/ANN.md) |
 | `index export` | push the same chunks into RagForge (JSONL or HTTP) |
 | `backends` | which engines are usable, how fast each has been — see [docs/BACKENDS.md](docs/BACKENDS.md) |

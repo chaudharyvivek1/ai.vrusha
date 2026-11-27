@@ -154,19 +154,67 @@ example.com no longer match; the price column changed on 2 pages; the licence
 changed on 1."* That is what makes a corpus trustworthy rather than merely
 large.
 
-## What to build, in order
+## Implemented so far
 
-1. **`vrusha verify --refetch`** — smallest, highest value, uses code that
-   already exists, and answers "is my stored data proper". No new dependency.
-2. **Table extraction + schema inference** for HTML/CSV into `rows`/`columns`
-   tables, linked to chunks. Deterministic, no model, testable against fixtures.
-3. **Tier 1 formulas** — derived columns, AST-restricted.
-4. **SearXNG + trafilatura** as the search/extract path, behind the existing
-   `harvest` command.
-5. **Relation inference** across tables (entity keys, join edges, confidence).
-6. **Tier 2 sandboxed scripts** — last, because it is the only irreversible
-   risk in the list.
+Steps 1 and 2 of the plan are in, with tests:
 
-Each step has an acceptance test that fails today: a fixture page whose table
-must become 5 typed rows with the right units, a drifted URL that must be
-flagged, a formula that must be refused for importing `os`.
+```bash
+vrusha extract --dir ./pages --licence MIT    # html tables + csv -> typed rows
+vrusha tables                                  # what was extracted, with schemas
+vrusha tables --id 1                           # the rows themselves
+vrusha verify --refetch                        # is what we stored still true?
+vrusha verify --refetch --apply                # ... and write the result back
+```
+
+What it does, measured against the fixtures in `examples/fixtures/data/`:
+
+| input | result |
+|---|---|
+| `plans.html`, a 5-column pricing table | 1 table, 3 rows, 80% typed columns |
+| `₹1,23,456`, `Rs 5.5 lakh`, `₹2.4 crore` | `123456`, `550000`, `24000000` — with the raw text kept |
+| `१५/१२/२०२६` | `2026-12-15` |
+| `99.9%` | `percent`, unit `%` |
+| `50 GB`, `500 GB`, `5 TB` | `int`, unit **`mixed`** — a sum would be wrong, so it is marked |
+| a two-row nav table | rejected: *every row identical* / *no typed column* |
+| `vendors.csv` | 1 table, `price:money`, `seats:int`, `renewal:date` |
+
+Rows are stored as JSON in `x_rows` beside a schema in `x_columns`, so SQLite's
+own JSON functions make them queryable:
+
+```sql
+SELECT SUM(json_extract(data,'$.price')) FROM x_rows WHERE table_id = 1;
+```
+
+`verify --refetch` re-fetches every `http` document and classifies it:
+`unchanged` (shingle overlap >=95%), `drifted` (70-95%), `rewritten` (<70%),
+`gone` (404/410, the code read back out of the error), `licence-changed`, or
+`error`. It is a dry run unless `--apply` is passed, and `--apply` only writes
+for `unchanged` (refresh `retrieved`) and `gone` (record the status).
+
+## What to build next, in order
+
+1. ~~`verify --refetch`~~ — done.
+2. ~~Table extraction + schema inference for HTML/CSV~~ — done.
+3. **Tier 1 formulas** — derived columns (`price / area`), AST-restricted.
+4. **JSON-LD and schema.org** — typed entities that need no table at all.
+5. **PDF tables** — the hardest, which is why it is last of the sources.
+6. **SearXNG + trafilatura** as the search/extract path behind `harvest`.
+7. **Relation inference** across tables (entity keys, join edges, confidence).
+8. **Tier 2 sandboxed scripts** — last, because it is the only irreversible
+   risk in the list, and a subprocess is not a sandbox.
+
+## Known limits, stated
+
+- **Units are not converted.** `50 GB` and `5 TB` are both stored as integers
+  with `unit: mixed`; the conversion is the query's job, not the parser's. A
+  silent conversion would be a wrong number that looks right.
+- **A table split across two chunks** matches neither, so `chunk_id` is null and
+  the row keeps its document and span instead. Provenance survives; the chunk
+  link does not.
+- **CSV has no type metadata**, so a column of bare digits is `int` even if it
+  is a postal code. The `__raw` field keeps what was written.
+- **The licence check only fires when both sides have one.** A page that stopped
+  declaring a licence does not overwrite a stored SPDX id — a missing signal is
+  not a changed signal.
+- **`--refetch` is one request per document**, rate-limited per host. At 10k
+  documents that is a slow job, not something you run on every commit.
