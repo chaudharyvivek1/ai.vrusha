@@ -419,11 +419,18 @@ def test_j2_unknown_charset_name_is_ignored_not_fatal(server):
 def test_j2_a_wrong_header_is_not_trusted(server):
     """The header says utf-8 and the bytes are cp1252.
 
+    Needs the optional decoder: `charset_normalizer` is the only thing that can
+    guess cp1252 from the bytes, and without it the answer is a lossy utf-8
+    fallback, which is the correct behaviour but a different one. Skipped rather
+    than failed on a bare install, which is what `requirements.txt` describes.
+
     The declaration cannot decode the body, so it is discarded. Whatever
     happens next is recorded as a guess or a fallback, never as a clean
     header decode -- and the text survives, because a page that decoded to
     U+FFFD would be rejected by the quality gate for the wrong reason.
     """
+    pytest.importorskip("charset_normalizer",
+                        reason="optional decoder; without it this is a lossy fallback")
     doc = fetcher().get(f"{server}/wrong-header")
     assert doc.ok
     assert doc.encoding_source != "header"
