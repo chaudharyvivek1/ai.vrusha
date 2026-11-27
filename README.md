@@ -241,6 +241,10 @@ endpoint.
 | `train` | train the model |
 | `generate` | sample from a checkpoint |
 | `verify` | quality control over the store |
+| `index build\|stats\|drop` | the vector index — see [docs/ANN.md](docs/ANN.md) |
+| `index export` | push the same chunks into RagForge (JSONL or HTTP) |
+| `backends` | which engines are usable, how fast each has been — see [docs/BACKENDS.md](docs/BACKENDS.md) |
+| `serve` | one JSON API, either engine behind it |
 | `report` | one page |
 
 Every command takes `--json`, `--root` and `--config`.

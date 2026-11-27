@@ -24,10 +24,21 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 
 from .address import Address, centroid_table, semantic_similarity
+from .ann import AnnConfig, AnnError, load_for as _ann_load
 from .db import Store
 
 _ADDRESS_IN_QUERY = re.compile(r"\b\d{1,2}(?:\.\d{1,8}){1,4}\b")
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]{2,}")
+
+
+def _ann(store: Store, cfg: Optional[dict]):
+    """The usable index for this store, or None. Never raises.
+
+    `load_for` decides: mode, freshness, size. Keeping the decision in one
+    place means `query`, `ask` and the benchmark all agree about when the
+    index is in play, which is what makes a recall number mean something.
+    """
+    return _ann_load(store, cfg)
 
 
 @dataclass
@@ -73,6 +84,8 @@ class Retrieval:
     hits: List[Hit] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
     address_hint: Optional[Address] = None
+    #: which engine served the vector signal, and why (see store/router.py)
+    decision: Optional[dict] = None
 
     @property
     def empty(self) -> bool:
@@ -86,6 +99,7 @@ class Retrieval:
         return {
             "query": self.query,
             "notes": self.notes,
+            "decision": self.decision,
             "address_hint": str(self.address_hint) if self.address_hint else None,
             "hits": [h.to_dict() for h in self.hits],
         }
@@ -106,17 +120,33 @@ def _reciprocal_rank_fusion(rankings: Dict[str, List[int]], weights: Dict[str, f
 
 
 def _vector_ranking(store: Store, embedder, query: str, limit: int,
-                    floor: float = 0.0) -> List[tuple[int, float]]:
+                    floor: float = 0.0, cfg: Optional[dict] = None) -> List[tuple[int, float]]:
     """Cosine ranking, with a floor.
 
     Without the floor the vector signal always returns its top N, however
     unrelated, and retrieval is never empty. That is what makes a system
     answer a question it has no material for.
+
+    The index answers first when there is a fresh one: it scores a few cells
+    instead of every row. The full scan below stays, because it is both the
+    fallback when no index exists and the reference the index is measured
+    against. A floor that filters everything is not an error: the caller is
+    told the vector signal found nothing, and fuses what is left.
     """
+    query_vector = embedder.encode_one(query)
+
+    index = _ann(store, cfg)
+    if index is not None and query_vector.shape[0] == index.dim:
+        try:
+            ranked = index.search(query_vector, limit, store=store,
+                                  cfg=AnnConfig.from_cfg(cfg))
+            return [(chunk_id, score) for chunk_id, score in ranked if score >= floor]
+        except AnnError:
+            pass  # a broken index is a slow query, never a failed one
+
     ids, matrix = store.get_vectors()
     if not ids:
         return []
-    query_vector = embedder.encode_one(query)
     if query_vector.shape[0] != matrix.shape[1]:
         return []
     similarity = matrix @ query_vector
@@ -166,7 +196,12 @@ def _identifier_bonus(query: str, hit: Hit) -> float:
 
 def retrieve(store: Store, embedder, query: str, cfg: dict,
              address_hint: Optional[Address] = None,
-             top_k: Optional[int] = None) -> Retrieval:
+             top_k: Optional[int] = None,
+             router=None) -> Retrieval:
+    """Retrieve. With a `router`, the vector signal is served by whichever
+    engine the router picks (native, RagForge, exact) instead of always by
+    `_vector_ranking`; everything downstream is identical, because a backend
+    returns chunk ids and scores and nothing else."""
     query_cfg = cfg.get("query", {})
     top_k = int(top_k or query_cfg.get("top_k", 8))
     candidates = int(query_cfg.get("candidates", 60))
@@ -191,7 +226,20 @@ def retrieve(store: Store, embedder, query: str, cfg: dict,
             f"vector width mismatch: store {stored_dim}, embedder {embedder_dim} "
             f"-- the vector signal is disabled; re-embed or fix store.embed_dim")
     bm25 = store.fts_search(query, limit=candidates)
-    vector = _vector_ranking(store, embedder, query, candidates, floor=floor)
+    if router is not None:
+        try:
+            hits, decision, timings = router.search(
+                embedder.encode_one(query), candidates, text=query)
+            vector = [(cid, score) for cid, score in hits if score >= floor]
+            result.decision = decision.to_dict()
+            result.decision["ms"] = timings
+            result.notes.append(f"vector via {decision}")
+        except Exception as exc:            # noqa: BLE001
+            result.notes.append(f"router failed ({exc}); falling back to the store")
+            vector = _vector_ranking(store, embedder, query, candidates,
+                                     floor=floor, cfg=cfg)
+    else:
+        vector = _vector_ranking(store, embedder, query, candidates, floor=floor, cfg=cfg)
     result.notes.append(f"bm25 {len(bm25)} candidates, vector {len(vector)} candidates")
 
     rankings = {

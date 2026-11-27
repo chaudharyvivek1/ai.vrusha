@@ -14,6 +14,10 @@
     vrusha dataset                build binary shards
     vrusha train                  train the model
     vrusha generate               sample from a checkpoint
+    vrusha index build            the vector index: routed scan over int8
+    vrusha index export           push the same chunks into RagForge
+    vrusha backends               which engines are usable, and how fast
+    vrusha serve                  one JSON API, either engine behind it
     vrusha verify                 quality control over the store
     vrusha report                 one page
 
@@ -47,6 +51,14 @@ def _open_store(cfg: dict):
 def _embedder(cfg: dict, verbose: bool = False):
     from .store.embed import get_embedder
     return get_embedder(cfg, verbose=verbose)
+
+
+def _router(cfg: dict, store, embedder):
+    """The router for this command, or None when the config says off."""
+    if str((cfg.get("backends", {}) or {}).get("mode", "auto")).lower() == "off":
+        return None
+    from .store.router import Router
+    return Router(store, embedder, cfg)
 
 
 def _emit(args, payload, human: str) -> None:
@@ -268,13 +280,22 @@ def cmd_query(args, cfg, rules, registry) -> int:
     from .store.query import retrieve
     store = _open_store(cfg)
     address = Address.parse(args.address) if args.address else None
-    retrieval = retrieve(store, _embedder(cfg), args.question, cfg,
-                         address_hint=address, top_k=args.top_k)
+    embedder = _embedder(cfg)
+    retrieval = retrieve(store, embedder, args.question, cfg,
+                         address_hint=address, top_k=args.top_k,
+                         router=_router(cfg, store, embedder))
     store.close()
     if args.json:
         print(json.dumps(retrieval.to_dict(), indent=2, ensure_ascii=False))
         return 0
     print(f"query: {args.question}")
+    if getattr(args, "explain", False) and retrieval.decision:
+        decision = retrieval.decision
+        print(f"  backend: {decision['backend']} ({decision['gate']}: {decision['reason']})")
+        if decision.get("ms"):
+            print("  ms: " + "  ".join(f"{k}={v}" for k, v in decision["ms"].items()))
+        for skipped in decision.get("skipped") or []:
+            print(f"  skipped: {skipped}")
     for note in retrieval.notes:
         print(f"  · {note}")
     print()
@@ -295,10 +316,12 @@ def cmd_ask(args, cfg, rules, registry) -> int:
     from .answer import ask
     from .store.address import Address
     store = _open_store(cfg)
-    answer = ask(store, _embedder(cfg), args.question, cfg,
+    embedder = _embedder(cfg)
+    answer = ask(store, embedder, args.question, cfg,
                  checkpoint=args.checkpoint,
                  address=Address.parse(args.address) if args.address else None,
-                 top_k=args.top_k)
+                 top_k=args.top_k,
+                 router=_router(cfg, store, embedder))
     store.close()
     if args.json:
         print(json.dumps(answer.to_dict(), indent=2, ensure_ascii=False))
@@ -549,6 +572,146 @@ def cmd_generate(args, cfg, rules, registry) -> int:
     return 0
 
 
+def cmd_index(args, cfg, rules, registry) -> int:
+    """Build, inspect or drop the vector index. The store is never touched."""
+    from .store import ann as ann_mod
+
+    action = getattr(args, "index_action", "stats")
+    store = _open_store(cfg)
+    try:
+        if action == "build":
+            try:
+                index = ann_mod.build_for(store, cfg, verbose=not args.json)
+            except ann_mod.AnnError as exc:
+                print(f"index: {exc}")
+                return 1
+            payload = index.stats()
+            payload["directory"] = ann_mod.index_dir(cfg)
+            _emit(args, payload,
+                  f"built {payload['rows']:,} vectors into {payload['cells']:,} cells "
+                  f"at {payload['dim']} dims, {payload['bytes'] / 1e6:.1f} MB\n"
+                  f"  {payload['directory']}")
+            return 0
+
+        if action == "export":
+            from .store import export as export_mod
+            from .store.backends import RagForgeBackend
+            if args.to != "ragforge":
+                print(f"index export: unknown target {args.to!r}; only ragforge")
+                return 2
+            if getattr(args, "jsonl", ""):
+                summary = export_mod.export_to_jsonl(store, args.jsonl)
+                _emit(args, summary,
+                      f"wrote {summary['chunks']:,} rows at {summary['dim']} dims "
+                      f"to {summary['path']}")
+                return 0
+            if args.url:
+                backend = RagForgeBackend(url=args.url, timeout=30.0)
+                if not backend.available():
+                    print(f"index export: {args.url} is not answering /ready")
+                    return 1
+                summary = export_mod.export_to_url(store, backend, size=args.batch)
+            else:
+                if not args.dir:
+                    print("index export: give --url to POST, or --dir to write files")
+                    return 2
+                summary = export_mod.export_to_dir(store, args.dir, size=args.batch)
+            _emit(args, summary,
+                  f"exported {summary['chunks']:,} chunks in {summary['batches']} batches")
+            return 0
+
+        if action == "drop":
+            removed = ann_mod.drop_for(cfg)
+            _emit(args, {"dropped": removed, "directory": ann_mod.index_dir(cfg)},
+                  "index removed; the store is untouched" if removed
+                  else "no index to remove")
+            return 0
+
+        # stats: is there one, is it fresh, and how are the rows distributed
+        directory = ann_mod.index_dir(cfg)
+        forced = dict(cfg)
+        forced["ann"] = {**cfg.get("ann", {}), "mode": "force"}
+        index = ann_mod.load_for(store, forced)
+        total, _max_id = store.vector_fingerprint()
+        if index is None:
+            on_disk = bool(directory) and os.path.exists(
+                os.path.join(directory, ann_mod.META))
+            _emit(args, {"index": None, "vectors_in_store": total,
+                         "stale_on_disk": on_disk, "directory": directory},
+                  ("index is stale: the store has moved on. run `vrusha index build`"
+                   if on_disk else "no index. `vrusha index build` makes one")
+                  + f"\n  vectors in store: {total:,}")
+            return 0
+
+        stats = index.stats()
+        stats["stale"] = index.is_stale(store)
+        stats["vectors_in_store"] = total
+        stats["directory"] = directory
+        cells = stats["rows_per_cell"]
+        _emit(args, stats,
+              f"rows {stats['rows']:,}  cells {stats['cells']:,}  "
+              f"dim {stats['dim']}  {stats['bytes'] / 1e6:.1f} MB"
+              + ("  (mmapped)" if stats["mmapped"] else "  (in ram)")
+              + f"\n  rows/cell min {cells['min']} median {cells['median']} "
+                f"max {cells['max']}"
+              + f"\n  built {stats['built_at']}  stale {stats['stale']}")
+        return 0
+    finally:
+        store.close()
+
+
+def cmd_backends(args, cfg, rules, registry) -> int:
+    """What engines this machine can offer, and how each has performed."""
+    from .store.router import Router
+
+    store = _open_store(cfg)
+    try:
+        router = Router(store, _embedder(cfg), cfg)
+        report = router.report()
+    finally:
+        store.close()
+
+    if args.json:
+        print(json.dumps(report, indent=2, ensure_ascii=False, default=str))
+        return 0
+
+    rows = [[item["name"],
+             item.get("status", "yes" if item.get("available") else "no"),
+             f"{item.get('rows', 0):,}" if item.get("rows") else "-",
+             f"{item['ewma_ms']:.2f}" if item.get("ewma_ms") else "-",
+             str(item.get("samples", 0)),
+             str(item.get("errors", 0)),
+             "cooling" if item.get("cooling") else "",
+             ",".join(item.get("capabilities", []))]
+            for item in report]
+    _print_table(rows, ["backend", "status", "rows", "ewma ms", "n", "err", "", "capabilities"])
+    free = report[0].get("free_ram_mb") if report else None
+    if free is not None:
+        print(f"\n  free RAM {free:.0f} MB, {report[0].get('vectors_in_store', 0):,} vectors in store")
+    print("  set backends.ragforge.url to bring the second engine into the rotation")
+    return 0
+
+
+def cmd_serve(args, cfg, rules, registry) -> int:
+    """The unified JSON API. Holds one router, so its memory survives requests."""
+    from .serve import serve
+
+    httpd = serve(cfg, _embedder(cfg), host=args.host, port=args.port,
+                  verbose=args.verbose)
+    print(f"vrusha serving on http://{args.host}:{args.port}")
+    print("  POST /search   {text|vector, k, filter?}")
+    print("  POST /ask      {question, k?}")
+    print("  GET  /backends /health /stats")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nstopping")
+    finally:
+        httpd.server_close()
+        httpd.store.close()
+    return 0
+
+
 def cmd_verify(args, cfg, rules, registry) -> int:
     from .verify import format_results, run_verify, summarise
     store = _open_store(cfg)
@@ -631,10 +794,22 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--distance", nargs=2, metavar=("A", "B"))
     p.set_defaults(func=cmd_address)
 
+    sub.add_parser("backends", parents=[common],
+                   help="which engines are usable, and how fast they have been"
+                   ).set_defaults(func=cmd_backends)
+
+    p = sub.add_parser("serve", parents=[common],
+                       help="the unified JSON API over every backend")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
+    p.set_defaults(func=cmd_serve)
+
     p = sub.add_parser("query", parents=[common], help="retrieval only, no answer")
     p.add_argument("question")
     p.add_argument("--top-k", type=int, default=None)
     p.add_argument("--address", help="bias retrieval toward this region")
+    p.add_argument("--explain", action="store_true",
+                   help="print which backend served the vector signal, and why")
     p.set_defaults(func=cmd_query)
 
     p = sub.add_parser("ask", parents=[common], help="retrieve and answer, with citations")
@@ -702,6 +877,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_generate)
 
     sub.add_parser("verify", parents=[common], help="quality control over the store").set_defaults(func=cmd_verify)
+
+    p = sub.add_parser("index", parents=[common],
+                       help="build, inspect, export or drop the vector index")
+    p.add_argument("index_action", nargs="?", default="stats",
+                   choices=["build", "stats", "drop", "export"])
+    p.add_argument("--to", default="ragforge", help="export target")
+    p.add_argument("--url", default="", help="RagForge base URL to POST batches to")
+    p.add_argument("--dir", default="", help="write batch JSON files here instead")
+    p.add_argument("--batch", type=int, default=2000)
+    p.add_argument("--jsonl", default="",
+                   help="write one line per chunk, for RagForge's own ingest")
+    p.set_defaults(func=cmd_index)
     sub.add_parser("report", parents=[common], help="one page").set_defaults(func=cmd_report)
 
     return parser
