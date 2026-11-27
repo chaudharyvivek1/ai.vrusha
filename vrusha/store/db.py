@@ -360,6 +360,7 @@ class Store:
                 f"(`vrusha ingest` after `store.clear_vectors()`), or point the config at "
                 f"the embedder that produced the stored vectors.")
         blob, dtype_name, dim = pack(array, dtype)
+        self._bump_revision()
         self.conn.execute(
             "INSERT OR REPLACE INTO vectors(chunk_id, dim, dtype, blob) VALUES (?,?,?,?)",
             (chunk_id, dim, dtype_name, blob))
@@ -369,6 +370,7 @@ class Store:
         removed = int(self.conn.execute("SELECT COUNT(*) FROM vectors").fetchone()[0])
         self.conn.execute("DELETE FROM vectors")
         self.conn.execute("DELETE FROM meta WHERE key='embed_dim'")
+        self._bump_revision()
         return removed
 
     def get_vectors(self, chunk_ids: Optional[Sequence[int]] = None) -> Tuple[List[int], np.ndarray]:
@@ -395,6 +397,23 @@ class Store:
     def vector_dim(self) -> Optional[int]:
         row = self.conn.execute("SELECT dim FROM vectors LIMIT 1").fetchone()
         return int(row[0]) if row else None
+
+    def vector_revision(self) -> int:
+        """A cheap monotone counter that changes whenever the vectors change.
+
+        `vector_fingerprint()` counts the table, which is an O(n) scan: 1.8 s at
+        200k rows on a 2-vCPU box. The router asks "is the index stale?" on
+        every query, so that scan was the query. This counter is one key
+        lookup, and it is bumped by every write that can invalidate an index.
+        """
+        row = self.conn.execute(
+            "SELECT value FROM meta WHERE key='vectors_rev'").fetchone()
+        return int(row[0]) if row else 0
+
+    def _bump_revision(self) -> None:
+        self.conn.execute(
+            "INSERT INTO meta(key, value) VALUES('vectors_rev', '1') "
+            "ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1")
 
     def vector_fingerprint(self) -> Tuple[int, int]:
         """(count, max chunk id) — cheap, and enough to tell a stale index.
