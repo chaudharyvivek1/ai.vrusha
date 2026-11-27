@@ -28,7 +28,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -210,12 +210,18 @@ class StoreDuplicateIndex:
 class Store:
     """Open (or create) the database and answer questions about it."""
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, check_same_thread: bool = True):
+        """`check_same_thread=False` is for a server: one connection, many threads.
+
+        SQLite serialises access itself, and every write path in this package
+        already goes through a transaction, so this is safe for a read-mostly
+        HTTP surface. Do not use it to write from several threads at once.
+        """
         self.path = path
         parent = os.path.dirname(os.path.abspath(path))
         if parent:
             os.makedirs(parent, exist_ok=True)
-        self.conn = sqlite3.connect(path)
+        self.conn = sqlite3.connect(path, check_same_thread=check_same_thread)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
@@ -389,6 +395,44 @@ class Store:
     def vector_dim(self) -> Optional[int]:
         row = self.conn.execute("SELECT dim FROM vectors LIMIT 1").fetchone()
         return int(row[0]) if row else None
+
+    def vector_fingerprint(self) -> Tuple[int, int]:
+        """(count, max chunk id) — cheap, and enough to tell a stale index.
+
+        The ANN index records this pair when it is built. Any insert or delete
+        of a vector changes one of the two, so a mismatch means the index
+        describes a corpus that no longer exists.
+        """
+        row = self.conn.execute(
+            "SELECT COUNT(*), COALESCE(MAX(chunk_id), 0) FROM vectors").fetchone()
+        return int(row[0]), int(row[1])
+
+    def iter_vectors(self, batch: int = 8192,
+                     after: int = 0) -> Iterator[Tuple[List[int], np.ndarray]]:
+        """Walk every vector in chunk order, one batch at a time.
+
+        `get_vectors()` is right for a rescore of a hundred rows and wrong for
+        a corpus: it materialises the whole table. Building an index over ten
+        million vectors needs a stream, and this is it. Keyset pagination on
+        the primary key, so it stays linear however large the table gets.
+        """
+        batch = max(1, int(batch))
+        cursor = int(after)
+        while True:
+            rows = self.conn.execute(
+                "SELECT chunk_id, dim, dtype, blob FROM vectors "
+                "WHERE chunk_id > ? ORDER BY chunk_id LIMIT ?",
+                (cursor, batch)).fetchall()
+            if not rows:
+                return
+            dim = int(rows[0]["dim"])
+            matrix = np.zeros((len(rows), dim), dtype=np.float32)
+            ids: List[int] = []
+            for index, row in enumerate(rows):
+                matrix[index] = unpack(row["blob"], row["dtype"], int(row["dim"]))
+                ids.append(int(row["chunk_id"]))
+            cursor = ids[-1]
+            yield ids, matrix
 
     def all_chunks(self, active_only: bool = True) -> List[sqlite3.Row]:
         query = "SELECT * FROM chunks"

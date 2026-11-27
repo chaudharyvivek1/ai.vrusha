@@ -15,3 +15,8 @@ tokenizers>=0.15
 
 # Optional in-process embedding backend (the default hash backend needs nothing).
 # sentence-transformers>=2.2
+
+# Charset guessing for pages whose headers lie. Without it a page that is not
+# utf-8 is decoded lossily and marked so in the manifest, which is correct but
+# loses the text; with it the encoding is guessed and the text survives.
+# charset-normalizer>=3.0

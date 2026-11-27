@@ -73,8 +73,10 @@ def ask(
     address: Optional[Address] = None,
     top_k: Optional[int] = None,
     device: str = "cpu",
+    router=None,
 ) -> Answer:
-    retrieval = retrieve(store, embedder, question, cfg, address_hint=address, top_k=top_k)
+    retrieval = retrieve(store, embedder, question, cfg, address_hint=address,
+                         top_k=top_k, router=router)
     if retrieval.empty:
         return Answer(
             question=question, text="I do not have this in the store.",

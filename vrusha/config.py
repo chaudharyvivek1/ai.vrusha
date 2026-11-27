@@ -26,6 +26,8 @@ DEFAULTS: Dict[str, Any] = {
         "tokens": "tokens",
         "models": "models",
         "logs": "logs",
+        #: The ANN index. A rebuildable cache, never a source of truth.
+        "index": "index",
     },
     "http": {
         "timeout": 20.0,
@@ -101,6 +103,47 @@ DEFAULTS: Dict[str, Any] = {
         # below this cosine a vector hit is noise, not a near miss
         "min_vector_similarity": 0.05,
         "refuse_below": 0.02,
+    },
+    "ann": {
+        # auto    use the index when one exists, is fresh, and is big enough
+        # force   use it even on a small corpus (for measuring it)
+        # off     always scan exactly, which is the reference the index is
+        #         judged against and the fallback when anything looks wrong
+        "mode": "auto",
+        #: Below this many vectors a full scan is faster than the routing
+        #: overhead, and simpler to be sure about.
+        "min_vectors": 20_000,
+        "target_cell_size": 512,
+        "train_sample": 100_000,
+        "iters": 10,
+        "seed": 13,
+        #: 0 opens max(8, 10% of the cells, at most 128): the scored-row count
+        #: stays roughly constant as the corpus grows, which is the point of
+        #: an index. Raise it for recall, lower it for latency; the measured
+        #: curve is in docs/ANN.md.
+        "nprobe": 0,
+        "rescore": 128,
+        "ram_limit_mb": 512,
+        # int8 4x smaller with a conversion per scored row; float32 needs no
+        # conversion and is faster when it fits; auto picks by ram_limit_mb.
+        "dtype": "auto",
+    },
+    "backends": {
+        # auto    pick per query from what is available and measured (router)
+        # exact   force the full scan, for measuring
+        # off     do not use the router at all: query uses the native index
+        "mode": "auto",
+        #: Set a URL to bring RagForge into the rotation. Empty means the
+        #: second engine is not configured, and nothing tries to reach it.
+        "ragforge": {
+            "url": "",
+            "timeout": 2.0,
+            "token_env": "RAGFORGE_TOKEN",
+        },
+        "cooldown_s": 30.0,      # how long a failed backend stays demoted
+        "hysteresis": 0.20,      # a switch needs a 20% margin, not a tie
+        "min_free_mb": 256.0,    # below this, prefer the out-of-process engine
+        "shadow_every": 0,       # >0 probes the runner-up every N queries
     },
     "tokens": {
         "vocab_size": 8192,
@@ -204,7 +247,7 @@ def resolve(cfg: Dict[str, Any], key: str) -> str:
 
 def ensure_dirs(cfg: Dict[str, Any]) -> None:
     """Create every directory the pipeline writes to. Safe to call twice."""
-    for key in ("root", "raw", "manifests", "vectors", "tokens", "models", "logs"):
+    for key in ("root", "raw", "manifests", "vectors", "tokens", "models", "logs", "index"):
         os.makedirs(resolve(cfg, key), exist_ok=True)
 
 
