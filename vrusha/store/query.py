@@ -155,6 +155,42 @@ def _vector_ranking(store: Store, embedder, query: str, limit: int,
             if float(similarity[int(i)]) >= floor]
 
 
+_ADDRESS_CACHE: Dict[str, tuple] = {}
+
+
+def _address_table(store: Store):
+    """Every chunk's address as integers, materialised once per revision.
+
+    `semantic_similarity` is a Python function called once per chunk, and the
+    address was parsed from a string first: at 200k chunks that was 64 ms of an
+    82 ms query. The numeric columns already exist in `chunks`, so the whole
+    ranking can be done in numpy — and the matrix is cached against
+    `chunk_revision()`, which triggers maintain, so a write invalidates it
+    without a scan.
+    """
+    key = str(store.path)
+    revision = store.chunk_revision()
+    cached = _ADDRESS_CACHE.get(key)
+    if cached is not None and cached[0] == revision:
+        return cached[1], cached[2], cached[3]
+
+    rows = store.conn.execute(
+        "SELECT chunk_id, addr_domain, addr_family, addr_kind, addr_cluster, "
+        "addr_ordinal FROM chunks WHERE address IS NOT NULL AND active = 1 "
+        "ORDER BY chunk_id").fetchall()
+    count = len(rows)
+    chunk_ids = np.fromiter((int(row[0]) for row in rows), dtype=np.int64,
+                            count=count)
+    matrix = np.zeros((count, 5), dtype=np.int32)
+    for column in range(5):
+        matrix[:, column] = np.fromiter(
+            (int(row[column + 1] or 0) for row in rows), dtype=np.int32,
+            count=count)
+    centroids = centroid_table(store.get_centroids())
+    _ADDRESS_CACHE[key] = (revision, chunk_ids, matrix, centroids)
+    return chunk_ids, matrix, centroids
+
+
 def _address_ranking(store: Store, hint: Address, limit: int) -> List[tuple[int, float]]:
     """Rank by meaning, not by subtracting segment numbers.
 
@@ -162,15 +198,65 @@ def _address_ranking(store: Store, hint: Address, limit: int) -> List[tuple[int,
     and cluster 2 are the two biggest topics, not two neighbouring ones. The
     centroids are the only thing in the store that knows which clusters are
     actually about the same thing.
+
+    Same rule as `semantic_similarity`, vectorised: labels mismatch by a fixed
+    penalty, clusters compare by centroid cosine, and the ordinal only matters
+    inside one cluster.
     """
-    centroids = centroid_table(store.get_centroids())
-    scored = []
-    for chunk_id, address in store.addresses():
-        score = semantic_similarity(hint, address, centroids)
-        if score > 0:
-            scored.append((chunk_id, score))
-    scored.sort(key=lambda pair: (-pair[1], pair[0]))
-    return scored[:limit]
+    chunk_ids, matrix, centroids = _address_table(store)
+    if len(chunk_ids) == 0:
+        return []
+
+    target = np.asarray(hint.segments[:5], dtype=np.int32)
+    same_domain = matrix[:, 0] == target[0]
+    same_family = matrix[:, 1] == target[1]
+    same_kind = matrix[:, 2] == target[2]
+    same_cluster = matrix[:, 3] == target[3]
+
+    score = np.zeros(len(chunk_ids), dtype=np.float64)
+    score[same_domain] = 0.25
+    score[same_domain & same_family] = 0.5
+    deep = same_domain & same_family & same_kind
+    score[deep] = 0.6                       # different cluster, no centroids
+    score[deep & same_cluster] = 1.0
+
+    if centroids:
+        hint_vector = centroids.get(tuple(int(part) for part in target[:4]))
+        if hint_vector is not None:
+            index = np.full(len(chunk_ids), -1, dtype=np.int32)
+            table = []
+            position: Dict[tuple, int] = {}
+            for row, address in enumerate(map(tuple, matrix[deep][:, :4])):
+                key = tuple(int(part) for part in address)
+                if key not in position:
+                    position[key] = len(table)
+                    table.append(centroids.get(key))
+                index[np.flatnonzero(deep)[row]] = position[key]
+            usable = np.array([vector is not None for vector in table], dtype=bool)
+            if usable.any():
+                stacked = np.stack([vector if vector is not None
+                                    else np.zeros_like(hint_vector, dtype=np.float32)
+                                    for vector in table])
+                cosine = stacked.astype(np.float64) @ np.asarray(
+                    hint_vector, dtype=np.float64)
+                cosine = np.clip(cosine, 0.0, 1.0)
+                chosen = deep & (index >= 0)
+                valid = np.zeros(len(chunk_ids), dtype=bool)
+                valid[chosen] = usable[index[chosen]]
+                score[valid] = cosine[index[valid]]
+
+    # inside one cluster the ordinal is a weak position, not a distance
+    ordinals = matrix[:, 4]
+    if target[4]:
+        damped = same_cluster & (ordinals != 0)
+        score[damped] = score[damped] / (1.0 + 0.02 * np.abs(
+            ordinals[damped] - target[4]))
+
+    keep = np.flatnonzero(score > 0)
+    if len(keep) == 0:
+        return []
+    order = keep[np.lexsort((chunk_ids[keep], -score[keep]))]
+    return [(int(chunk_ids[i]), float(score[i])) for i in order[:limit]]
 
 
 def _identifier_bonus(query: str, hit: Hit) -> float:

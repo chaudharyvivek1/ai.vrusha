@@ -334,6 +334,54 @@ pip install model2vec
 python bench/embedders.py      # the three tables above, from this machine
 ```
 
+## The address signal: 349 ms to 2.5 ms
+
+`docs/BENCHMARKS.md` named the address ranking as the largest remaining cost in
+the retriever. `bench/address.py` measures the two implementations on the same
+store — 20,000 chunks, each with a five-part address:
+
+| implementation | p50 | max |
+|---|---|---|
+| python loop over `store.addresses()` (before) | **349.2 ms** | 376.1 ms |
+| cached integer matrix + numpy (after) | **2.46 ms** | 2.78 ms |
+
+**142× faster, and the results are identical** — the script asserts that, and so
+does `tests/test_address_ranking.py`, which compares the vectorised rule against
+`semantic_similarity` for five different hints, with and without centroids.
+
+Two things made it slow, and both were avoidable:
+
+1. **Every address was parsed from its string on every query.** `Address.parse`
+   ran 20,000 times per query. The five numeric parts were already columns in
+   `chunks` (`addr_domain`, `addr_family`, `addr_kind`, `addr_cluster`,
+   `addr_ordinal`) — the string was being parsed to recover what the schema
+   already had.
+2. **`semantic_similarity` ran once per chunk in Python.** The rule is four
+   comparisons and a dot product; it vectorises completely.
+
+### The freshness check, done right this time
+
+The matrix has to be invalidated when a chunk changes, and wave 7's lesson was
+that asking "has anything changed?" with a `COUNT(*)` costs more than the thing
+being guarded. So the revision is a `meta` counter maintained by **SQLite
+triggers** on `chunks` (insert and update) — every write path bumps it, including
+the ones that are raw SQL in `passes.py` and would have been missed by hand.
+
+```
+cold query (first after a write)   ~350 ms   materialises the matrix
+warm query                          ~2.5 ms   matrix reused
+```
+
+The first query after a write pays for the materialisation, which is the same
+trade as the vector index: build once, query many. In `vrusha serve` it is paid
+once; in a one-shot CLI it is paid once per command, which is still cheaper than
+the old cost on any store above a few thousand chunks.
+
+```bash
+python bench/address.py            # both numbers, from this machine
+ADDRESS_BENCH_CHUNKS=200000 python bench/address.py
+```
+
 ## Reproducing this
 
 ```bash

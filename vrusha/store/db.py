@@ -140,6 +140,19 @@ CREATE TABLE IF NOT EXISTS passes (
   stats    TEXT
 );
 
+-- The address ranking reads every chunk's address on every query. A counter
+-- maintained by triggers is the difference between an O(1) freshness check and
+-- an O(n) scan: the same bug wave 7 found in vector_fingerprint().
+INSERT OR IGNORE INTO meta (key, value) VALUES ('chunks_rev', 0);
+CREATE TRIGGER IF NOT EXISTS chunks_rev_insert AFTER INSERT ON chunks
+BEGIN
+  UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'chunks_rev';
+END;
+CREATE TRIGGER IF NOT EXISTS chunks_rev_update AFTER UPDATE ON chunks
+BEGIN
+  UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'chunks_rev';
+END;
+
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
   text, symbol,
   content='chunks', content_rowid='chunk_id',
@@ -397,6 +410,16 @@ class Store:
     def vector_dim(self) -> Optional[int]:
         row = self.conn.execute("SELECT dim FROM vectors LIMIT 1").fetchone()
         return int(row[0]) if row else None
+
+    def chunk_revision(self) -> int:
+        """Cheap, monotone, and bumped by triggers on every chunk write.
+
+        The address ranking materialises every address; without this it would
+        have to prove the table had not changed by scanning it, on every query.
+        """
+        row = self.conn.execute(
+            "SELECT value FROM meta WHERE key = 'chunks_rev'").fetchone()
+        return int(row[0]) if row else 0
 
     def vector_revision(self) -> int:
         """A cheap monotone counter that changes whenever the vectors change.
