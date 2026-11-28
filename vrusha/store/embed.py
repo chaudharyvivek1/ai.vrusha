@@ -113,6 +113,54 @@ class OllamaEmbedder(Embedder):
         return matrix / norms
 
 
+class Model2VecEmbedder(Embedder):
+    """Static embeddings: a distilled table of token vectors, averaged.
+
+    `model2vec` turns a sentence transformer into a lookup table — ~8 MB for the
+    smallest model, no torch, no GPU, and up to 500x faster on a CPU than the
+    model it was distilled from. That is the right trade for this project, whose
+    default embedder is a hash function and whose target machine is a laptop.
+
+    The text is uncontextualised: the vector for a word is the same in every
+    sentence. That is a real loss on some queries and a real gain on cost, and
+    the honest place to say so is here rather than in a benchmark table.
+
+    Loaded lazily: `import vrusha` must not require the model, the hub, or the
+    network. If it is missing, `get_embedder` falls back to hash and says why.
+    """
+
+    name = "model2vec"
+
+    def __init__(self, model: str = "minishlab/potion-base-8M",
+                 dim: Optional[int] = None):
+        from model2vec import StaticModel       # optional dependency
+
+        self.model_name = model
+        self._model = StaticModel.from_pretrained(model)
+        width = 0
+        for attribute in ("dim", "dimensionality"):
+            value = getattr(self._model, attribute, None)
+            if isinstance(value, int) and value > 0:
+                width = value
+                break
+        if not width:
+            embedding = getattr(self._model, "embedding", None)
+            shape = getattr(embedding, "shape", None)
+            width = int(shape[1]) if shape and len(shape) > 1 else 0
+        self.dim = int(width or dim or 256)
+
+    def available(self) -> bool:
+        return self._model is not None
+
+    def encode(self, texts: Sequence[str]) -> np.ndarray:
+        if not texts:
+            return np.zeros((0, self.dim), dtype=np.float32)
+        vectors = np.asarray(self._model.encode(list(texts)), dtype=np.float32)
+        # cosine, as everywhere else in this store: a dot product of unit vectors
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        return vectors / np.clip(norms, 1e-12, None)
+
+
 class SentenceTransformerEmbedder(Embedder):
     name = "sentence-transformers"
 
@@ -145,6 +193,16 @@ def get_embedder(cfg: dict, verbose: bool = False) -> Embedder:
         if verbose:
             print(f"  embedder: ollama not reachable at {embedder.url}; using hash")
         return HashEmbedder(dim)
+
+    if backend in ("model2vec", "static", "potion"):
+        name = store_cfg.get("embed_model_static", "minishlab/potion-base-8M")
+        try:
+            return Model2VecEmbedder(name, dim)
+        except Exception as exc:                # noqa: BLE001 - absent or no hub
+            if verbose:
+                print(f"  embedder: model2vec unavailable "
+                      f"({type(exc).__name__}: {exc}); using hash")
+            return HashEmbedder(dim)
 
     if backend in ("sentence-transformers", "st", "minilm"):
         try:
