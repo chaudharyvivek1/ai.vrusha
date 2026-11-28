@@ -1,0 +1,326 @@
+{
+ "name": "docs-40",
+ "description": "40 questions about this repository's own documentation. Phrased away from the target's own words, so a question does not just test the keyword index.",
+ "items": [
+  {
+   "question": "how do I stop the crawler from hammering a site",
+   "document": "OPERATIONS.md",
+   "keywords": [
+    "rate",
+    "limit"
+   ]
+  },
+  {
+   "question": "why are my results wrong after I added new pages",
+   "document": "ANN.md",
+   "keywords": [
+    "stale",
+    "rebuild"
+   ]
+  },
+  {
+   "question": "what happens when two pieces of text get the same number",
+   "document": "ADDRESS.md",
+   "keywords": [
+    "collide",
+    "ordinal"
+   ]
+  },
+  {
+   "question": "can this run on a laptop without a graphics card",
+   "document": "MODEL.md",
+   "keywords": [
+    "cpu",
+    "model"
+   ]
+  },
+  {
+   "question": "how do I know a page is allowed to be kept",
+   "document": "RULES.md",
+   "keywords": [
+    "licence",
+    "rule"
+   ]
+  },
+  {
+   "question": "splitting one long article into smaller pieces",
+   "document": "ARCHITECTURE.md",
+   "keywords": [
+    "chunk",
+    "split"
+   ]
+  },
+  {
+   "question": "teaching a small language model on my own text",
+   "document": "MODEL.md",
+   "keywords": [
+    "train",
+    "tokenizer"
+   ]
+  },
+  {
+   "question": "what am I allowed to do with the copied material",
+   "document": "RULES.md",
+   "keywords": [
+    "licence",
+    "permission"
+   ]
+  },
+  {
+   "question": "finding equations inside a research paper",
+   "document": "MATH.md",
+   "keywords": [
+    "formula",
+    "canonical"
+   ]
+  },
+  {
+   "question": "answering a question and showing where it came from",
+   "document": "RESEARCH.md",
+   "keywords": [
+    "source",
+    "licence"
+   ]
+  },
+  {
+   "question": "what do the numbers in the tree mean",
+   "document": "ADDRESS.md",
+   "keywords": [
+    "segment",
+    "address"
+   ]
+  },
+  {
+   "question": "making search faster on a cheap machine",
+   "document": "ANN.md",
+   "keywords": [
+    "index",
+    "nprobe"
+   ]
+  },
+  {
+   "question": "which engine answers a query and who decides",
+   "document": "BACKENDS.md",
+   "keywords": [
+    "router",
+    "backend"
+   ]
+  },
+  {
+   "question": "searching vectors inside the database file itself",
+   "document": "BACKENDS.md",
+   "keywords": [
+    "sqlite-vec",
+    "vec0"
+   ]
+  },
+  {
+   "question": "how fast is retrieval and how accurate",
+   "document": "BENCHMARKS.md",
+   "keywords": [
+    "p50",
+    "recall"
+   ]
+  },
+  {
+   "question": "pulling a table out of a web page",
+   "document": "EXTRACT.md",
+   "keywords": [
+    "table",
+    "column"
+   ]
+  },
+  {
+   "question": "reading a table from a printed document",
+   "document": "EXTRACT.md",
+   "keywords": [
+    "pdf",
+    "position"
+   ]
+  },
+  {
+   "question": "the structured data a page already publishes",
+   "document": "EXTRACT.md",
+   "keywords": [
+    "json-ld",
+    "schema"
+   ]
+  },
+  {
+   "question": "running user code without letting it escape",
+   "document": "EXTRACT.md",
+   "keywords": [
+    "sandbox",
+    "namespace"
+   ]
+  },
+  {
+   "question": "grouping similar passages together",
+   "document": "PASSES.md",
+   "keywords": [
+    "cluster",
+    "centroid"
+   ]
+  },
+  {
+   "question": "removing near-duplicate text",
+   "document": "PASSES.md",
+   "keywords": [
+    "merge",
+    "duplicate"
+   ]
+  },
+  {
+   "question": "what endpoints does the server expose",
+   "document": "SERVE.md",
+   "keywords": [
+    "route",
+    "json"
+   ]
+  },
+  {
+   "question": "is the http api safe to expose",
+   "document": "SERVE.md",
+   "keywords": [
+    "auth",
+    "127.0.0.1"
+   ]
+  },
+  {
+   "question": "dubbing a video into another language",
+   "document": "TOOLS.md",
+   "keywords": [
+    "dubforge",
+    "subprocess"
+   ]
+  },
+  {
+   "question": "making a 3d model from a description",
+   "document": "TOOLS.md",
+   "keywords": [
+    "forge3d",
+    "trimesh"
+   ]
+  },
+  {
+   "question": "which software licences are refused",
+   "document": "SURVEY.md",
+   "keywords": [
+    "gpl",
+    "licence"
+   ]
+  },
+  {
+   "question": "what did the code audit find",
+   "document": "AUDIT-2.md",
+   "keywords": [
+    "bug",
+    "audit"
+   ]
+  },
+  {
+   "question": "where do agents write what they learned",
+   "document": "BOARD.md",
+   "keywords": [
+    "append",
+    "seq"
+   ]
+  },
+  {
+   "question": "stopping two agents doing the same task",
+   "document": "BOARD.md",
+   "keywords": [
+    "lease",
+    "claim"
+   ]
+  },
+  {
+   "question": "how many agents can run at once",
+   "document": "BOARD.md",
+   "keywords": [
+    "slot",
+    "heartbeat"
+   ]
+  },
+  {
+   "question": "how many levels of agent are there",
+   "document": "AGENTS.md",
+   "keywords": [
+    "level",
+    "agent"
+   ]
+  },
+  {
+   "question": "why can sixty-four agents not each hold a window",
+   "document": "AGENTS.md",
+   "keywords": [
+    "kv",
+    "cache"
+   ]
+  },
+  {
+   "question": "which public benchmarks can no longer rank systems",
+   "document": "MASTER-PLAN.md",
+   "keywords": [
+    "saturated",
+    "benchmark"
+   ]
+  },
+  {
+   "question": "what skills does the system have and lack",
+   "document": "MASTER-PLAN.md",
+   "keywords": [
+    "skill",
+    "domain"
+   ]
+  },
+  {
+   "question": "what is the current plan and how many parts",
+   "document": "PLAN-V3.md",
+   "keywords": [
+    "part",
+    "phase"
+   ]
+  },
+  {
+   "question": "how is retrieval quality measured",
+   "document": "EVALUATE.md",
+   "keywords": [
+    "ndcg",
+    "recall"
+   ]
+  },
+  {
+   "question": "what was the first programme",
+   "document": "PROGRAM.md",
+   "keywords": [
+    "part",
+    "math"
+   ]
+  },
+  {
+   "question": "where do I start reading the documentation",
+   "document": "README.md",
+   "keywords": [
+    "plan",
+    "document"
+   ]
+  },
+  {
+   "question": "what stores the chunks and the rules",
+   "document": "ARCHITECTURE.md",
+   "keywords": [
+    "sqlite",
+    "store"
+   ]
+  },
+  {
+   "question": "what happens when a page changes after it was stored",
+   "document": "OPERATIONS.md",
+   "keywords": [
+    "verify",
+    "licence"
+   ]
+  }
+ ]
+}

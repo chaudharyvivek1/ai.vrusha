@@ -262,13 +262,13 @@ def items_from_stream(stream: bytes, page: int = 0) -> List[Item]:
             numbers = [v for k, v in operands if k == "number"]
             if numbers:
                 size = float(numbers[-1]) or 10.0
-        elif operator in (b"Td", b"TD"):
+        elif operator in (b"Td", b"TD") and in_text:
             numbers = [v for k, v in operands if k == "number"]
             if len(numbers) >= 2:
                 line_x += float(numbers[-2])
                 line_y += float(numbers[-1])
                 x, y = line_x, line_y
-        elif operator == b"Tm":
+        elif operator == b"Tm" and in_text:
             numbers = [v for k, v in operands if k == "number"]
             if len(numbers) >= 6:
                 line_x, line_y = float(numbers[-2]), float(numbers[-1])

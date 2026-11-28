@@ -19,7 +19,9 @@ the same values from a worked example on paper.
 """
 from __future__ import annotations
 
+import json
 import math
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
@@ -289,6 +291,15 @@ def run(store, embedder, cfg: dict, items: Sequence[Item] = DOCS_SET,
 
     from .store.query import retrieve
 
+    # An empty store scores 0% on every metric, which reads as "retrieval is
+    # broken" rather than "there is nothing to retrieve". Say which it is.
+    chunks = store.conn.execute(
+        "SELECT COUNT(*) FROM chunks WHERE active = 1").fetchone()[0]
+    if not chunks:
+        raise RuntimeError(
+            "the store has no chunks, so there is nothing to measure: "
+            "`vrusha ingest --dir <path> --licence MIT` first")
+
     outcomes: List[Outcome] = []
     for item in items:
         started = time.perf_counter()
@@ -309,3 +320,71 @@ def run(store, embedder, cfg: dict, items: Sequence[Item] = DOCS_SET,
         outcome.seconds = time.perf_counter() - started
         outcomes.append(outcome)
     return outcomes
+
+
+# ---------------------------------------------------------------------------
+# sets on disk, and the loader that refuses a malformed one
+# ---------------------------------------------------------------------------
+
+SETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eval_sets")
+
+#: Named sets that ship with the package.
+SETS: Dict[str, str] = {
+    "docs": os.path.join(SETS_DIR, "docs-40.json"),
+}
+
+
+class MalformedSet(ValueError):
+    """A set that would measure the wrong thing if it were loaded quietly."""
+
+
+def load_set(path_or_name: str) -> List[Item]:
+    """Load a labelled set, refusing anything that is not fully labelled.
+
+    A benchmark with an unlabelled question does not fail — it scores that
+    question as a miss, and the number quietly becomes a measure of the labels
+    rather than of the system. So every question must have a document and at
+    least one keyword, and a duplicate question is refused too: it would be
+    counted twice and weight itself.
+    """
+    path = SETS.get(path_or_name, path_or_name)
+    if not os.path.exists(path):
+        raise MalformedSet(
+            f"no such set {path_or_name!r}; known sets: {', '.join(sorted(SETS))}")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except ValueError as exc:
+        raise MalformedSet(f"{path}: not valid JSON ({exc})") from exc
+
+    raw_items = payload.get("items") if isinstance(payload, dict) else payload
+    if not isinstance(raw_items, list) or not raw_items:
+        raise MalformedSet(f"{path}: expected a non-empty list of items")
+
+    items: List[Item] = []
+    seen: Dict[str, int] = {}
+    for index, raw in enumerate(raw_items, start=1):
+        if not isinstance(raw, dict):
+            raise MalformedSet(f"{path}: item {index} is not an object")
+        question = str(raw.get("question") or "").strip()
+        document = str(raw.get("document") or "").strip()
+        keywords = raw.get("keywords") or []
+        if not question:
+            raise MalformedSet(f"{path}: item {index} has no question")
+        if not document:
+            raise MalformedSet(f"{path}: item {index} ({question!r}) has no document")
+        if not isinstance(keywords, list) or not keywords:
+            raise MalformedSet(
+                f"{path}: item {index} ({question!r}) has no keywords, so its "
+                f"passage can never be found")
+        if not all(isinstance(word, str) and word.strip() for word in keywords):
+            raise MalformedSet(f"{path}: item {index} has a blank keyword")
+        if question in seen:
+            raise MalformedSet(
+                f"{path}: item {index} repeats item {seen[question]} "
+                f"({question!r}); a duplicate is counted twice")
+        seen[question] = index
+        items.append(Item(question=question, document=document,
+                          keywords=tuple(word.strip() for word in keywords),
+                          note=str(raw.get("note") or "")))
+    return items

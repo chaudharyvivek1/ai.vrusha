@@ -50,14 +50,20 @@ or term. It cannot catch an answer that is faithful in words and wrong in meanin
 Calling it "faithfulness" and stopping there would be the kind of number this
 project has refused since wave 20.
 
-## The built-in set
+## The set
 
-Twelve questions about this repository, phrased the way a person would phrase them
+Forty questions about this repository (`vrusha/eval_sets/docs-40.json`), phrased
+the way a person would phrase them
 — deliberately avoiding the words the target document uses, because a question
 that repeats the title only tests the keyword index. Each carries the document that
 answers it and the words a correct passage must contain.
 
-Part 2 of the plan grows this to forty, with passage-level labels. Part 5 adds
+Every question carries the document that answers it and the words a correct
+passage must contain, and `tests/test_evaluate.py` checks that **every keyword
+really appears in its own document** — a keyword that is not there makes
+`passage@k` unachievable and turns the metric into a measure of the labels.
+
+Part 5 adds
 BEIR and CRAG **subsets** — datasets, not leaderboards, which is a change from
 `MASTER-PLAN.md` and is explained in `PLAN-V3.md` Part B.
 

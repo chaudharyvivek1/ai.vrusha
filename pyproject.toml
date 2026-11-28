@@ -31,4 +31,5 @@ vrusha = "vrusha.cli:main"
 include = ["vrusha*"]
 
 [tool.setuptools.package-data]
-vrusha = ["rules/levels/**/*.json", "languages/profiles/*.json"]
+vrusha = ["rules/levels/**/*.json", "languages/profiles/*.json",
+          "eval_sets/*.json"]
