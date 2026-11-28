@@ -444,6 +444,30 @@ system that guesses it will eventually be confidently wrong.
 `rapidfuzz` when installed, `difflib` when not — the fallback is slower and scores
 slightly differently, which the tests tolerate by asserting bands, not equality.
 
+## The order it was built in
+
+Salvaged from the design branch that was closed when this work began landing
+(commit `4969273`), because the *order* was the argument and the order is not
+recorded anywhere else:
+
+1. **`vrusha verify --refetch`** — smallest, highest value, uses code that
+   already exists, and answers "is my stored data proper". No new dependency.
+2. **Table extraction + schema inference** for HTML/CSV into `rows`/`columns`
+   tables, linked to chunks. Deterministic, no model, testable against fixtures.
+3. **Tier 1 formulas** — derived columns, AST-restricted.
+4. **SearXNG + trafilatura** as the search/extract path, behind the existing
+   `harvest` command.
+5. **Relation inference** across tables (entity keys, join edges, confidence).
+6. **Tier 2 sandboxed scripts** — last, because it is the only irreversible risk
+   in the list.
+
+Each step had an acceptance test that failed on the day it was written: a fixture
+page whose table must become 5 typed rows with the right units, a drifted URL
+that must be flagged, a formula that must be refused for importing `os`.
+
+Steps 1–6 all landed (waves 9–16), in that order, and entity resolution followed
+as wave 26.
+
 ## Known limits, stated
 
 - **Units are not converted.** `50 GB` and `5 TB` are both stored as integers
