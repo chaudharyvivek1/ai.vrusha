@@ -88,3 +88,52 @@ def test_only_the_cap_is_boosted(tmp_path):
     graphboost.boost(store, "Acme Corporation", hits, max_hits=1, notes=notes)
     assert notes and "boosted 1 hit" in notes[0]
     store.close()
+
+
+# ---------------------------------------------------------------------------
+# the query-to-community match, which was exact and therefore dead
+# ---------------------------------------------------------------------------
+
+
+def test_a_query_entity_that_is_a_prefix_of_a_stored_name_still_matches(tmp_path):
+    """A question says `Alpha Design Technologies`; the graph stored
+    `Alpha Design Technologies Pvt Ltd`. Exact equality returned an empty set for
+    every question on the real corpus, so the boost could not move a single rank."""
+    from vrusha.store import graphboost
+    from vrusha.store.db import Store
+
+    store = Store(str(tmp_path / "boost.db"))
+    try:
+        graphboost._ensure(store) if hasattr(graphboost, "_ensure") else None
+        store.conn.execute("CREATE TABLE IF NOT EXISTS x_communities "
+                           "(name TEXT, community INTEGER)")
+        store.conn.execute("INSERT INTO x_communities VALUES (?, ?)",
+                           ("alpha design technologies pvt ltd", 0))
+        store.commit()
+        found = graphboost._query_communities(
+            store, "which company acquired Alpha Design Technologies")
+        assert found == {0}, "a prefix of a stored name did not match"
+    finally:
+        store.close()
+
+
+def test_an_unrelated_query_still_matches_nothing(tmp_path):
+    from vrusha.store import graphboost
+    from vrusha.store.db import Store
+
+    store = Store(str(tmp_path / "none.db"))
+    try:
+        store.conn.execute("CREATE TABLE IF NOT EXISTS x_communities "
+                           "(name TEXT, community INTEGER)")
+        store.conn.execute("INSERT INTO x_communities VALUES (?, ?)",
+                           ("alpha design technologies pvt ltd", 0))
+        store.commit()
+        assert graphboost._query_communities(store, "what is a licence gate") == set()
+    finally:
+        store.close()
+
+
+def test_the_boost_does_not_invent_hits():
+    """It may reorder; it may never add."""
+    from vrusha.store import graphboost
+    assert graphboost.boost(None, "anything", []) == []
