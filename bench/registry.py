@@ -596,6 +596,29 @@ def bench_graphboost() -> Dict[str, float]:
             "reordered": float(changed), "edges": float(len(rows))}
 
 
+def bench_compaction() -> Dict[str, float]:
+    """What compaction saves on a realistic run, and what it costs."""
+    from vrusha.store import compaction
+    from vrusha.store.blackboard import Entry
+
+    made = []
+    kinds = ["progress"] * 40 + ["finding"] * 10 + ["decision", "error", "artifact"]
+    for index, kind in enumerate(kinds, start=1):
+        entry = Entry(run="r", seq=index, task=f"t{index % 5}", kind=kind,
+                      summary=f"{kind} {index} " + ("detail " * 80))
+        if kind == "artifact":
+            entry.refs = [f"file:{index}.csv"]
+        made.append(entry)
+    timings = _timeit(lambda: compaction.compact(made), repeats=10)
+    summary = compaction.compact(made)
+    verdict = compaction.verify(summary, made)
+    return {"entries": float(len(made)), "ms": timings["p50_ms"],
+            "tokens_before": float(summary.tokens_before),
+            "tokens_after": float(summary.tokens_after),
+            "ratio": float(summary.ratio),
+            "verified": 1.0 if verdict["ok"] else 0.0}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -613,6 +636,7 @@ BENCHMARKS: List[tuple] = [
     ("communities", bench_communities, "label propagation over a known graph"),
     ("paths", bench_paths, "two-hop search over a chained graph"),
     ("graphboost", bench_graphboost, "the bounded graph boost over 20 hits"),
+    ("compaction", bench_compaction, "fold a run into a verified summary"),
 ]
 
 
