@@ -16,6 +16,11 @@ tokenizers>=0.15
 # Optional in-process embedding backend (the default hash backend needs nothing).
 # sentence-transformers>=2.2
 
+# Boilerplate removal: navigation, footers and cookie banners out of the corpus.
+# Without it `harvest.extractor: auto` falls back to the built-in tag stripper,
+# which keeps the navigation. Optional, like the rest of this file.
+# trafilatura>=2.0
+
 # Charset guessing for pages whose headers lie. Without it a page that is not
 # utf-8 is decoded lossily and marked so in the manifest, which is correct but
 # loses the text; with it the encoding is guessed and the text survives.

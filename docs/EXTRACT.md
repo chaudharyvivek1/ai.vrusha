@@ -156,7 +156,7 @@ large.
 
 ## Implemented so far
 
-Steps 1 to 5 of the plan are in, with tests:
+Steps 1 to 6 of the plan are in, with tests:
 
 ```bash
 vrusha extract --dir ./pages --licence MIT    # html tables + csv -> typed rows
@@ -201,7 +201,7 @@ for `unchanged` (refresh `retrieved`) and `gone` (record the status).
 3. ~~Tier 1 formulas~~ — done (`vrusha/store/formula.py`, `vrusha derive`).
 4. ~~JSON-LD and schema.org~~ — done (`vrusha/store/jsonld.py`).
 5. ~~PDF tables~~ — done (`vrusha/store/pdf.py`, no PDF dependency).
-6. **SearXNG + trafilatura** as the search/extract path behind `harvest`.
+6. ~~SearXNG + trafilatura, and `harvest --extract`~~ — done.
 7. **Relation inference** across tables (entity keys, join edges, confidence).
 8. **Tier 2 sandboxed scripts** — last, because it is the only irreversible
    risk in the list, and a subprocess is not a sandbox.
@@ -300,6 +300,35 @@ in the document text where retrieval can find it.
 What it will not read, and returns nothing rather than nonsense for: encryption,
 Type0/CID fonts with custom encodings, text drawn as vector outlines, rotated
 pages. A table of mojibake is worse than no table.
+
+## Search, fetch, extract
+
+The loop is one command now:
+
+```bash
+export SEARXNG_URL=http://127.0.0.1:8080      # your own instance, no API key
+vrusha harvest --query "hosting plans" --backend searxng --limit 5 \
+               --licence MIT --extract
+```
+
+`--extract` reads the **markup** the fetcher already has in hand, rather than
+re-inferring a table from flattened text. One page can yield several things at
+once: the `<table>` on it, the `application/ld+json` beside it, and the prose
+that is neither, which still becomes chunks for retrieval.
+
+| piece | state before | state now |
+|---|---|---|
+| search | five backends, `searxng` already among them | unchanged; a stub instance is in the tests |
+| fetch | gated, charset-detected, robots-respecting | keeps `Document.html`, so extraction needs no second fetch |
+| text extraction | tag stripper only | `harvest.extractor`: `simple` (default), `trafilatura`, `auto` |
+| tables and entities | `extract --dir` on files | `harvest --extract` on fetched pages |
+
+On the boilerplate: the tag stripper already drops `nav` and `footer` by tag,
+so trafilatura's real gain is the boilerplate **inside** the body — a cookie
+banner in a `div`, a sidebar, a "related articles" block. It only removes what
+it can tell apart from content, so on a thin page it keeps everything, which is
+the safe direction. That is why the default stays `simple`: a corpus should not
+change character because an optional package happens to be installed.
 
 ## Known limits, stated
 

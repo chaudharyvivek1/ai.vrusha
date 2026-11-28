@@ -86,6 +86,9 @@ class Document:
     kind: str = "prose"           # prose | code
     lang: str = "en"
     links: List[str] = field(default_factory=list)
+    #: The page as fetched, kept so tables and JSON-LD can be extracted from the
+    #: markup rather than re-inferred from the flattened text.
+    html: str = ""
     error: str = ""
     #: How the bytes were decoded, and how sure we are. Recorded in the
     #: manifest so a mis-decode is visible after the fact.
@@ -227,8 +230,23 @@ class _TextExtractor(HTMLParser):
         return "\n".join(out).strip()
 
 
-def html_to_text(html: str, base_url: str = "") -> tuple[str, str, List[str]]:
-    """Return (title, text, absolute links). Never raises on bad markup."""
+def html_to_text(html: str, base_url: str = "", extractor: str = "auto"
+                 ) -> tuple[str, str, List[str]]:
+    """Return (title, text, absolute links). Never raises on bad markup.
+
+    `extractor`:
+        simple       the built-in tag stripper: fast, no dependency. It drops
+                     nav and footer by tag, but keeps a cookie banner inside the
+                     body, because nothing in the markup says it is boilerplate
+        trafilatura  boilerplate removal by a maintained extractor; the text is
+                     what a reader would see, which is what a corpus wants
+        auto         trafilatura when it is installed and returns something
+                     substantial, the stripper otherwise. Not the default: the
+                     text a corpus stores should not depend on what is installed
+
+    The title and the links always come from the built-in parser, because
+    trafilatura returns neither and both are needed downstream.
+    """
     parser = _TextExtractor()
     try:
         parser.feed(html)
@@ -243,7 +261,25 @@ def html_to_text(html: str, base_url: str = "") -> tuple[str, str, List[str]]:
             continue
         links.append(urllib.parse.urljoin(base_url, href) if base_url else href)
     title = re.sub(r"\s+", " ", parser.title).strip()
-    return title, parser.text(), links
+    simple = parser.text()
+
+    if extractor not in ("simple", "auto", "trafilatura"):
+        raise ValueError(f"unknown extractor {extractor!r}; "
+                         f"use simple, trafilatura or auto")
+    if extractor != "simple":
+        try:
+            from trafilatura import extract as _trafilatura_extract
+            cleaned = _trafilatura_extract(html, include_comments=False,
+                                           include_tables=False, favor_recall=True)
+        except Exception:                    # noqa: BLE001 - absent or unhappy
+            cleaned = None
+        if cleaned and len(cleaned) >= 200:
+            return title, cleaned.strip(), links
+        if extractor == "trafilatura" and not cleaned:
+            # asked for it and got nothing: say so rather than silently
+            # returning the stripper's output and calling it extracted
+            raise RuntimeError("trafilatura returned no text for this page")
+    return title, simple, links
 
 
 # --------------------------------------------------------------------------
@@ -497,7 +533,8 @@ class Fetcher:
         header_charset = headers.get_content_charset() if headers else None
         result: CharsetResult = detect_charset(body, header_charset)
         html, lossy = decode(body, result)
-        title, text, links = html_to_text(html, url)
+        extractor = str((self.cfg.get("harvest") or {}).get("extractor", "simple"))
+        title, text, links = html_to_text(html, url, extractor=extractor)
         if not title:
             first = next((line for line in text.splitlines() if line.strip()), "")
             title = first[:120]
@@ -505,6 +542,7 @@ class Fetcher:
             url=url,
             title=title,
             text=text,
+            html=html,
             raw_chars=len(body),
             status=status,
             links=links,
