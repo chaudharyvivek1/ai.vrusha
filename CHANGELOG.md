@@ -8,6 +8,34 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 28 — the N+1 in `retrieve()` · PR #24
+
+With the address ranking fixed, the next question was what the rest of the query
+cost. The answer was not an algorithm.
+
+- `bench/retrieve_stages.py` — per-stage timing of one query
+- `vrusha/store/query.py` — hydration is **one** `SELECT … WHERE chunk_id IN
+  (…)` instead of one per candidate
+- `tests/test_address_ranking.py` — a regression test that counts the hydration
+  statements, because the failure mode is a silent slowdown with correct answers
+
+**The profile:** 5,120 `execute` and 4,960 `fetchone` calls over 80 queries — 62
+of each per query, all of them hydrating candidates one row at a time.
+
+| | before | after |
+|---|---|---|
+| p50 | 11.76 ms | **5.88 ms** |
+| p95 | 28.42 ms | **6.73 ms** |
+| executes per query | 64 | **5** |
+
+The p95 is the one that matters for a server: **4× better tail**, because the
+tail was the sum of sixty round trips.
+
+**What is left:** bm25 (1.94 ms) and the vector read (1.67 ms) — both constant
+factors of reading 60 rows from SQLite, not algorithm problems.
+
+---
+
 ## Wave 27 — branch cleanup, and the plan salvaged · PR #23
 
 24 branches, all of them debris from squash merges: a squash merge does not
