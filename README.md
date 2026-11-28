@@ -245,6 +245,7 @@ endpoint.
 | `joins --build` | which columns across tables are the same entity — see [docs/EXTRACT.md](docs/EXTRACT.md) |
 | `math "e^{i\pi}+1=0"` | search stored formulae as formulae — see [docs/MATH.md](docs/MATH.md) |
 | `research "question"` | search, fetch, extract, answer — with sources — see [docs/RESEARCH.md](docs/RESEARCH.md) |
+| `tools` | dubforge, forge3d, cutforge: ready or not, and why — see [docs/TOOLS.md](docs/TOOLS.md) |
 | `derive --script` | run your own transform under limits — needs `--allow-scripts` |
 | `derive --table N` | a computed column from a checked formula — see [docs/EXTRACT.md](docs/EXTRACT.md) |
 | `verify` | quality control over the store |

@@ -20,6 +20,7 @@
     vrusha joins                  which columns across tables are one entity
     vrusha math "e^{i\\pi}+1=0"   search stored formulae as formulae
     vrusha research "question"    search, fetch, extract, answer, with sources
+    vrusha tools                  which engines this machine can run, and why not
     vrusha verify --refetch       is what we stored still true?
     vrusha index build            the vector index: routed scan over int8
     vrusha index export           push the same chunks into RagForge
@@ -893,6 +894,55 @@ def cmd_derive(args, cfg, rules, registry) -> int:
     return 0
 
 
+def cmd_tools(args, cfg, rules, registry) -> int:
+    """Which of the three engines this machine can run, and why not."""
+    from .tools import describe_all, get_tool
+
+    if not args.name:
+        tools = describe_all()
+        if args.json:
+            print(json.dumps(tools, indent=2, ensure_ascii=False))
+            return 0
+        rows = [[t["name"], "yes" if t["available"] else "no", t["mode"],
+                 t["reason"]] for t in tools]
+        _print_table(rows, ["tool", "ready", "mode", "why"])
+        return 0
+
+    tool = get_tool(args.name)
+    if tool is None:
+        print(f"tools: no tool called {args.name!r}")
+        return 2
+    if not args.action:
+        status = tool.status().to_dict()
+        if args.json:
+            print(json.dumps(status, indent=2, ensure_ascii=False))
+        else:
+            print(f"  {status['name']}: {status['summary']}")
+            print(f"  ready {status['available']} ({status['mode']}) -- {status['reason']}")
+            print(f"  actions: {', '.join(tool.actions) or 'none'}")
+        return 0 if status["available"] else 1
+
+    options = {}
+    for pair in args.option or []:
+        key, _, value = pair.partition("=")
+        options[key.replace("-", "_")] = value or True
+    result = tool.run(args.action, timeout=args.timeout, **options)
+    if args.json:
+        print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False,
+                         default=str))
+    elif result.ok:
+        print(f"  {result.tool} {result.action}: ok in {result.seconds:.1f}s")
+        if result.data is not None:
+            print(json.dumps(result.data, indent=2, ensure_ascii=False, default=str)[:4000])
+        elif result.stdout.strip():
+            print(result.stdout[:4000])
+    else:
+        print(f"  {result.tool} {result.action}: failed -- {result.error}")
+        if result.stderr.strip():
+            print(result.stderr[-800:])
+    return 0 if result.ok else 1
+
+
 def cmd_research(args, cfg, rules, registry) -> int:
     """Search, fetch, extract, answer — and show every source."""
     from .research import render, research
@@ -1180,6 +1230,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=0, help="files to process")
     p.add_argument("--mdy", action="store_true", help="month-first dates (US corpora)")
     p.set_defaults(func=cmd_extract)
+
+    p = sub.add_parser("tools", parents=[common],
+                       help="dubforge, forge3d, cutforge: ready or not, and why")
+    p.add_argument("name", nargs="?", default="")
+    p.add_argument("--action", default="", help="a whitelisted action for that tool")
+    p.add_argument("--option", action="append", metavar="KEY=VALUE")
+    p.add_argument("--timeout", type=float, default=900.0)
+    p.set_defaults(func=cmd_tools)
 
     p = sub.add_parser("research", parents=[common],
                        help="search, fetch, extract, answer — with sources")
