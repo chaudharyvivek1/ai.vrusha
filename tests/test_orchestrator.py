@@ -364,3 +364,94 @@ def test_an_unreachable_server_fails_the_run_without_hanging(tmp_path):
                         worker=lambda task: "ok",
                         base_url="http://127.0.0.1:9", run_id="r1")
     store.close()
+
+
+# ---------------------------------------------------------------------------
+# the release criteria for staged execution
+# ---------------------------------------------------------------------------
+
+
+def _staged(tmp_path, worker, *, workers=3, run_id="s1"):
+    store, board, claims, registry, cfg = _pieces(tmp_path)
+    result = orch.run_stages(store, board, claims, registry, cfg, "goal",
+                             stages=[["research a", "research b", "research c"],
+                                     ["compare the findings"]],
+                             worker=worker, workers=workers, run_id=run_id)
+    return store, board, result
+
+
+def test_all_three_researchers_complete(tmp_path):
+    store, board, result = _staged(tmp_path, lambda task: f"did {task}")
+    assert result.done == 4 and result.failed == 0
+    store.close()
+
+
+def test_every_finding_is_persisted(tmp_path):
+    store, board, result = _staged(tmp_path, lambda task: f"did {task}")
+    findings = [entry for entry in board.since("s1", 0, limit=100)
+                if entry.kind == "finding"]
+    assert len(findings) == 4, f"{len(findings)} findings persisted"
+    store.close()
+
+
+def test_the_compare_task_starts_after_every_research_finding(tmp_path):
+    """The invariant: research findings are committed before stage 2 begins."""
+    seen = {}
+
+    def worker(task):
+        if task.startswith("compare"):
+            seen["seqs"] = [entry.seq for entry in board_ref[0].since("s1", 0, limit=100)
+                            if entry.kind == "finding"]
+        return "ok"
+
+    store, board, claims, registry, cfg = _pieces(tmp_path)
+    board_ref = [board]
+    result = orch.run_stages(store, board, claims, registry, cfg, "goal",
+                             stages=[["research a", "research b", "research c"],
+                                     ["compare the findings"]],
+                             worker=worker, workers=3, run_id="s1")
+    assert result.failed == 0
+    assert len(seen["seqs"]) == 3, f"compare saw {len(seen['seqs'])} research findings"
+    store.close()
+
+
+def test_a_forced_delay_keeps_the_ordering_invariant(tmp_path):
+    """A slow researcher must not let the compare task overtake it."""
+    import time as _time
+
+    def slow(task):
+        if task.startswith("research"):
+            _time.sleep(0.05)
+        return "ok"
+
+    store, board, result = _staged(tmp_path, slow)
+    assert result.done == 4
+    compare_seq = max(entry.seq for entry in board.since("s1", 0, limit=100)
+                      if entry.kind == "finding")
+    research_seqs = [entry.seq for entry in board.since("s1", 0, limit=100)
+                     if entry.kind == "finding" and "research" in entry.task]
+    assert all(seq < compare_seq for seq in research_seqs)
+    store.close()
+
+
+def test_a_failing_research_task_fails_explicitly(tmp_path):
+    def half(task):
+        if task == "research b":
+            raise RuntimeError("down")
+        return "ok"
+
+    store, board, result = _staged(tmp_path, half)
+    assert result.failed == 1
+    assert result.tasks[1].state == "failed"
+    store.close()
+
+
+def test_repeated_execution_never_gives_a_zero_finding_run(tmp_path):
+    """No intermittent empty results: the failure this test exists for."""
+    for attempt in range(3):
+        store, board, result = _staged(tmp_path, lambda task: f"did {task}",
+                                       run_id=f"r{attempt}")
+        findings = [entry for entry in board.since(f"r{attempt}", 0, limit=100)
+                    if entry.kind == "finding"]
+        assert len(findings) == 4, f"run {attempt} persisted {len(findings)}"
+        store.close()

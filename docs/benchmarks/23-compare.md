@@ -1,5 +1,17 @@
 # Four levels against one agent
 
+> **Corrected in wave 70.** The orchestrated run in this benchmark **did not measure
+> anything**: every worker failed with `ProgrammingError: SQLite objects created in a
+> thread can only be used in that same thread`, because a SQLite connection is bound
+> to the thread that made it. The "identical quality" was identical because both
+> columns came from a separate `evaluate.run`, not from the workers.
+>
+> The **cost** measurement stands (42 board entries, 40 claims). The **quality**
+> comparison is void. See `docs/benchmarks/30-multistep.md` for the measurement that
+> replaced it: **3 of 3 facts against 2 of 3**, with **921 characters of context
+> against 22,970**.
+
+
 **Benchmark:** `compare` · **measures:** the hierarchy against a single loop, same questions · **run:** 2026-11-28
 
 ## The numbers

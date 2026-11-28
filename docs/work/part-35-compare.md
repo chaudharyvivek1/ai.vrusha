@@ -1,5 +1,11 @@
 # Part 35 — four levels against one agent, and Phase 6 closed
 
+> **Corrected in wave 70:** the orchestrated run here **did not measure anything** —
+> every worker failed on a thread-bound SQLite connection, and the "identical
+> quality" came from a separate evaluation, not from the workers. The cost figures
+> stand; the quality comparison is void. The replacement measurement is
+> `docs/work/option-3-multistep.md`.
+
 **Wave 59 · `vrusha/compare.py`, `bench/registry.py`**
 
 ## The question, and the answer

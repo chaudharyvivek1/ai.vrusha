@@ -8,6 +8,37 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 70 — a multi-step goal, and the bug it uncovered · PR #67
+
+- `vrusha/orchestrator.py` — `run_stages()`: tasks in **waves**, with a **thread-local
+  store** (`store_factory`) so a worker gets its own connection
+- `vrusha/compare.py` — `multistep()`: research three companies, then compare
+- `tests/test_orchestrator.py` — 6 more tests, the seven release criteria
+
+**Diagnostic A found the cause in one run:** the research tasks failed with
+`ProgrammingError: SQLite objects created in a thread can only be used in that same
+thread`. **The stage barrier was already correct.**
+
+**This invalidates Part 35's orchestrated run:** every worker there was failing
+silently, and the "identical quality" came from a separate `evaluate.run`, not from
+the workers. The cost measurement stands; the quality comparison is void. Part 35's
+work log and benchmark report are corrected here.
+
+**The measurement, now that it works:**
+
+| | single | orchestrated |
+|---|---|---|
+| facts | 2 of 3 | **3 of 3** |
+| context for the compare step | 22,970 chars | **921 chars** |
+| seconds | 0.03–0.04 | 0.24–0.36 |
+
+**The first measurement in the project where orchestration wins**, and the reason is
+exactly what Part 35 could not test: the compare step gets distilled findings, **25×
+smaller**, covering every company. It is also **8× slower**. Both are the finding.
+Reproduced twice.
+
+---
+
 ## Wave 69 — a denser graph, and the boost still does nothing · PR #66
 
 - `examples/corpora/wiki-companies/` — **23 more articles** (15 → **38**), fetched

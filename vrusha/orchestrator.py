@@ -308,3 +308,96 @@ def run_remote(store, board, claims, registry, cfg, goal: str, *,
         result.entries = len(board.since(run_id, 0, limit=1000))
         result.seconds = time.perf_counter() - started
     return result
+
+
+def run_stages(store, board, claims, registry, cfg, goal: str, *,
+               stages: Sequence[Sequence[str]],
+               worker: Callable[[str], str], workers: int = DEFAULT_WORKERS,
+               run_id: str = "", store_factory: Optional[Callable] = None) -> Run:
+    """Tasks in **waves**: every task in a stage finishes before the next begins.
+
+    `run_pool` maps a flat list concurrently, so a task that needs another task's
+    output races it. Found by the multi-step comparison: the `compare` task read the
+    board before any research had written to it and reported **0 of 3 companies** --
+    a race, not a quality problem.
+
+    A stage is the smallest ordering primitive that fixes it, and it costs nothing
+    when there is only one stage.
+
+    **`store_factory`** exists because a worker runs in a thread and a SQLite
+    connection is bound to the thread that made it. Without it, any worker that
+    touches the store raises `ProgrammingError: SQLite objects created in a thread
+    can only be used in that same thread` -- found by diagnostic A, and the reason
+    every research task failed while the compare task succeeded.
+    """
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    started = time.perf_counter()
+    run_id = run_id or f"run-{int(started * 1000)}-{uuid.uuid4().hex[:6]}"
+    names = [name for stage in stages for name in stage]
+    result = Run(goal=goal, tasks=[Task(name=name) for name in names])
+    if not names:
+        return result
+
+    registry.open_run(run_id)
+    registry.register(run_id, "L1/super", level="L1", skill="plan")
+    board.append(run_id, task="plan", agent="L1/super", kind="decision",
+                 summary=f"goal: {goal[:160]} ({len(stages)} stage(s), "
+                         f"{len(names)} task(s))")
+
+    local = threading.local()
+
+    def _worker_store():
+        """One connection per thread, opened on first use and closed by the caller."""
+        if store_factory is None:
+            return store
+        if getattr(local, "store", None) is None:
+            local.store = store_factory()
+        return local.store
+
+    def work(index: int) -> None:
+        task = result.tasks[index]
+        name = f"L3/worker-{index % max(1, workers)}"
+        registry.register(run_id, name, level="L3", skill="work")
+        granted = claims.claim(run_id, task.name, name, ttl=120)
+        if not granted.granted:
+            task.state, task.error = "failed", f"not claimed: {granted.reason}"
+            return
+        try:
+            while task.attempts < MAX_ATTEMPTS:
+                task.attempts += 1
+                try:
+                    task.result = worker(task.name, _worker_store()) \
+                        if store_factory is not None else worker(task.name)
+                    task.result = task.result or ""
+                    task.state = "done"
+                    claims.complete(run_id, task.name, name, status="done")
+                    board.append(run_id, task=task.name, agent=name, kind="finding",
+                                 summary=task.result[:400] or "(empty)")
+                    return
+                except Exception as exc:         # noqa: BLE001
+                    task.error = f"{type(exc).__name__}: {exc}"
+                    if task.attempts >= MAX_ATTEMPTS:
+                        task.state = "failed"
+                        claims.complete(run_id, task.name, name, status="failed")
+                        board.append(run_id, task=task.name, agent=name,
+                                     kind="error", summary=task.error[:400])
+        finally:
+            registry.release(run_id, name)
+
+    try:
+        offset = 0
+        for stage in stages:
+            with ThreadPoolExecutor(max_workers=max(1, int(workers))) as pool:
+                list(pool.map(work, range(offset, offset + len(stage))))
+            offset += len(stage)
+    finally:
+        board.append(run_id, task="report", agent="L2/admin", kind="artifact",
+                     summary=f"{result.done} done, {result.failed} failed of "
+                             f"{len(result.tasks)} ({len(stages)} stage(s))",
+                     refs=[f"run:{run_id}"])
+        registry.release(run_id, "L1/super")
+        result.entries = len(board.since(run_id, 0, limit=1000))
+        result.seconds = time.perf_counter() - started
+    return result
