@@ -267,7 +267,7 @@ the whole window on a menu.
 Ordered so that each step is useful on its own and nothing is built on an
 unverified foundation.
 
-### Step 1 — the blackboard
+### Step 1 — the blackboard *(done, wave 33 — `docs/BOARD.md`)*
 Append-only entries with a monotonic `seq`, stored in SQLite beside the store.
 
 **Done means:** two writers appending 1,000 entries in parallel produce 1,000

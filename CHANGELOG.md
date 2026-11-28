@@ -8,6 +8,36 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 33 — the blackboard · PR #29
+
+Step 1 of `docs/AGENTS.md`: the shared log the agents will read and write.
+
+- `vrusha/store/blackboard.py` — append-only entries, dense per-run `seq`,
+  delta reads, subtree scoping, replay, and **quarantine** for text that looks
+  like an instruction aimed at a reader
+- `vrusha board` — runs, entries, `--since`, `--all`
+- `docs/BOARD.md`; `tests/test_blackboard.py` — 25 tests
+
+**The acceptance test:** 1,000 appends from 8 threads *and* 1,000 from 4 separate
+processes, each producing 1,000 distinct `seq` values, dense and lossless.
+
+**Three bugs in the first version, found by auditing it the same day:**
+
+1. **A shared connection.** The board used the store's `sqlite3.Connection`; eight
+   threads produced **127 of 1,000** entries with `cannot open savepoint - SQL
+   statements in progress`. A connection is not safe for concurrent statements,
+   whatever `check_same_thread` says. It now owns its own connection and
+   serialises writers, because SQLite has one writer at a time.
+2. **Appends were never committed**, so a second process saw an empty board.
+3. **`refs="table:1"` became seven refs** — a string is iterable and the coercion
+   was silent.
+
+A fourth was in the test: it left a `Blackboard` open, and `fork` copied that
+connection into every child — which is why the multi-process test passed alone and
+failed under the full suite.
+
+---
+
 ## Wave 32 — the master plan · PR #28
 
 The audit, the state of the field, and the agent design, merged into one plan.
