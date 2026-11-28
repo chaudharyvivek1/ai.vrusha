@@ -142,7 +142,68 @@ the statement *and* the read that follows it.
 That is the same class of bug the blackboard had, one level up: it is not enough
 to serialise the write if the code then reads on the same handle.
 
+## The registry: 64 slots, a heartbeat, and a cap that refuses
+
+```bash
+vrusha agents --run run-demo
+```
+```
+  slot  state  agent         level  skill           beat
+  ----  -----  ------------  -----  --------------  ----
+  1     live   L1/super      L1     planning        1s
+  2     live   L2/admin-1    L2     decompose       1s
+  3     live   L4/extract-1  L4     extract-tables  1s
+  5     live   L4/fetch-1    L4     fetch           1s
+
+  4 live, 0 dead, 60 free of 64
+  live by skill: extract-tables×1, planning×1, fetch×1, decompose×1
+```
+
+The board records what was learned; claims record who is doing what. Neither knows
+whether the agent holding a claim is still alive — a lease says when it expires,
+not whether anyone is behind it. The registry is the third piece.
+
+**The cap is the point.** `docs/AGENTS.md` §4 says 64 live agents, and a limit
+that lives in a document is a limit that does not exist. The 65th registration is
+refused:
+
+```
+all 64 slots are live (64 live); the cap is a limit, not a default
+```
+
+| rule | why |
+|---|---|
+| 64 slots per run, pre-created | so allocation is one atomic statement |
+| an agent takes the **lowest free slot** | deterministic, and a freed slot is reused |
+| re-registering keeps the slot | re-registering is a heartbeat, not a second identity |
+| a heartbeat older than `--stale-after` (90s) is dead | two missed beats, so one slow call does not kill a live agent |
+| a dead slot is reusable | a dead agent must not block the run |
+| a heartbeat does not revive a dead agent | it must re-register, and may get a different slot |
+
+Allocation is a single statement, for the reason the previous two modules taught:
+
+```sql
+UPDATE x_agents SET agent = ?, state = 'live', …
+ WHERE run = ? AND slot = (SELECT MIN(slot) FROM x_agents
+                            WHERE run = ? AND state IN ('free', 'dead'))
+RETURNING *
+```
+
+Counting "how many are live" and then inserting is the read-then-write gap that
+lets two agents take the same slot. Here it is one statement, or nothing.
+
+### What the audit of this module found
+
+Nothing. It was written with the lock held across every statement **and** the read
+that follows it, which is the bug the previous two waves produced, and the
+thread/process tests passed first time. The only fix was a long line.
+
+That is worth stating plainly: the audit found nothing because the lesson from the
+last two had already been applied, not because the module is simpler.
+
 ## What is not here yet
 
-The 64-slot registry (step 3), and the orchestrator that uses these two.
+The orchestrator that drives these three, and the JSON routes for them
+(`docs/SERVE.md` has the plan).
+
 

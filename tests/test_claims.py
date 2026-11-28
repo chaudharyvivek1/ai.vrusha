@@ -94,7 +94,11 @@ def test_claims_hold_across_processes(tmp_path):
 
     tasks = [f"task-{index}" for index in range(10)]
     racers = 6
-    context = multiprocessing.get_context("fork")
+    # `spawn`, not `fork`: forking a threaded process can deadlock the child on a
+    # lock another thread held at the moment of the fork, and Python 3.12 warns
+    # about it. A spawned child also inherits nothing, which is what a real
+    # worker on another machine would see.
+    context = multiprocessing.get_context("spawn")
     barrier = context.Barrier(racers)
     prefix = str(tmp_path / "won")
     processes = [context.Process(target=_process_racer,

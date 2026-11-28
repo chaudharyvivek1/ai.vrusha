@@ -256,6 +256,7 @@ endpoint.
 | `serve` | one JSON API, either engine behind it — see [docs/SERVE.md](docs/SERVE.md) |
 | — | the plan for many agents at once: [docs/AGENTS.md](docs/AGENTS.md) |
 | — | **the forward plan**: [docs/MASTER-PLAN.md](docs/MASTER-PLAN.md) |
+| — | **every document, indexed**: [docs/README.md](docs/README.md) |
 | `report` | one page |
 
 Every command takes `--json`, `--root` and `--config`.
