@@ -232,8 +232,18 @@ def extract_path(store, path: str, *, licence: Optional[str] = None,
         table = table_from_csv(raw, source=path)
         tables = [table] if table else []
         text = raw[:20000]
+    elif suffix == ".pdf":
+        from .pdf import extract_text_items, tables_from_pdf
+        with open(path, "rb") as handle:
+            data = handle.read()
+        tables = tables_from_pdf(data, source=path)
+        # the document text is every run, in reading order, so retrieval can
+        # still find a paragraph that was not a table
+        items = extract_text_items(data)
+        text = "\n".join(item.text for item in
+                         sorted(items, key=lambda i: (-i.y, i.x)))[:200000]
     else:
-        return {"path": path, "tables": 0, "rows": 0, "skipped": "not html or csv"}
+        return {"path": path, "tables": 0, "rows": 0, "skipped": "not html, csv or pdf"}
 
     doc_id = store.add_document(url=os.path.abspath(path),
                                 title=os.path.basename(path), text=text,
@@ -281,7 +291,8 @@ def extract_dir(store, directory: str, *, licence: Optional[str] = None,
     files: List[str] = []
     for root, _dirs, names in os.walk(directory):
         for name in sorted(names):
-            if os.path.splitext(name)[1].lower() in (".html", ".htm", ".xhtml", ".csv", ".tsv"):
+            if os.path.splitext(name)[1].lower() in (".html", ".htm", ".xhtml",
+                                                     ".csv", ".tsv", ".pdf"):
                 files.append(os.path.join(root, name))
     if limit:
         files = files[:limit]
