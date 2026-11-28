@@ -8,6 +8,32 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 42 — Part 16: the cross-encoder, built and not adopted · PR #38
+
+- `vrusha/rerank.py` — `CrossEncoderReranker` over **ONNX, not torch** (15 MB
+  instead of 800 MB), batched scoring, `scorer` injectable so the logic is
+  testable without the model
+- `retrieve()` — the second stage now sees `rerank.window` (20) of the first
+  stage's list, not all 60 candidates
+
+**The verdict: not adopted, and the reason is the machine.** The model loads
+(23 MB quantised MiniLM) and then: it first **OOM'd allocating 755 MB** per batch,
+and after the window fix it **timed out** on twelve questions on two shared vCPUs.
+The bar was explicit — beat nDCG 0.611 without losing passage ranking — and
+without a number there is no adoption.
+
+**A real bug found by measuring:** the reranker was handed every candidate. A
+second stage is a *re-ranker*, not a second search; handing it everything was both
+slower and fatal.
+
+**A finding that argues for the 40-question set:** on the first 12 questions the
+lexical reranker improved *everything* (nDCG 0.477 → 0.598, passage@5 0.333 →
+0.500); on all 40 it costs passage ranking. The same code, opposite conclusions,
+from the size of the set — a small set does not just give a noisy number, it gives
+a confidently wrong one.
+
+---
+
 ## Wave 41 — Parts 15 and 17: the lexical reranker, and every work benchmarked · PR #37
 
 - `vrusha/rerank.py` — a field-weighted BM25 reranker: no model, no dependency,

@@ -224,3 +224,99 @@ def test_a_configured_reranker_is_picked_up_from_config(tmp_path):
         store.close()
     finally:
         rerank.RERANKERS.pop("reverse", None)
+
+
+# ---------------------------------------------------------------------------
+# Part 16: the cross-encoder, tested without the model
+# ---------------------------------------------------------------------------
+
+
+class FakeScorer:
+    """Stands in for ONNX: scores by how many query words the passage contains."""
+
+    def __init__(self, available: bool = True):
+        self._available = available
+
+    def available(self) -> bool:
+        return self._available
+
+    def score(self, query, passages):
+        words = set(query.lower().split())
+        return [len(words & set((passage or "").lower().split())) / 10.0
+                for passage in passages]
+
+
+def test_the_cross_encoder_reorders_by_the_model_score():
+    hits = [_hit(1, text="nothing relevant here"), _hit(2, text="index routing")]
+    reranker = rerank.CrossEncoderReranker(alpha=1.0, scorer=FakeScorer())
+    out = reranker.rerank("index routing", hits, 2)
+    assert [hit.chunk_id for hit in out] == [2, 1]
+    assert out[0].scores["cross_encoder"] > out[1].scores["cross_encoder"]
+
+
+def test_the_cross_encoder_blends_with_the_fused_score():
+    """alpha 0 keeps the first stage's order even when the model disagrees."""
+    hits = [_hit(1, text="nothing"), _hit(2, text="index routing")]
+    reranker = rerank.CrossEncoderReranker(alpha=0.0, scorer=FakeScorer())
+    out = reranker.rerank("index routing", hits, 2)
+    assert [hit.chunk_id for hit in out] == [1, 2]
+
+
+def test_a_scorer_that_returns_the_wrong_count_is_refused():
+    class Short:
+        name = "short"
+
+        def available(self):
+            return True
+
+        def score(self, query, passages):
+            return [0.5]
+
+    reranker = rerank.CrossEncoderReranker(scorer=Short())
+    with pytest.raises(rerank.RerankError) as error:
+        reranker.rerank("q", [_hit(1), _hit(2)], 2)
+    assert "scores for" in str(error.value)
+
+
+def test_an_unavailable_cross_encoder_falls_back_to_the_no_op():
+    rerank.register("cross-encoder", lambda: rerank.CrossEncoderReranker(
+        scorer=FakeScorer(available=False)))
+    try:
+        assert rerank.build_reranker(
+            {"rerank": {"backend": "cross-encoder"}}).name == "none"
+    finally:
+        rerank.register("cross-encoder", rerank.CrossEncoderReranker)
+
+
+def test_the_cross_encoder_is_registered():
+    assert "cross-encoder" in rerank.RERANKERS
+    assert "lexical" in rerank.RERANKERS
+
+
+def test_the_reranker_sees_a_window_not_every_candidate(tmp_path):
+    """A second stage is a re-ranker, not a second search.
+
+    Handing it every candidate made a cross-encoder allocate 755 MB and fail on
+    a 2 GB machine -- found by running it.
+    """
+    seen = {}
+
+    class Spy:
+        name = "spy"
+
+        def available(self):
+            return True
+
+        def rerank(self, query, hits, k):
+            seen["count"] = len(hits)
+            return list(hits)[:k]
+
+    store, cfg = _store(tmp_path)
+    cfg["rerank"] = {"backend": "spy", "window": 3}
+    rerank.register("spy", Spy)
+    try:
+        retrieve(store, HashEmbedder(64), "how does the index route", cfg)
+    finally:
+        rerank.RERANKERS.pop("spy", None)
+    assert seen["count"] <= 3, f"the reranker saw {seen['count']} candidates"
+    store.close()

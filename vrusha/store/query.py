@@ -438,7 +438,13 @@ def retrieve(store: Store, embedder, query: str, cfg: dict,
     if reranker is not None:
         from ..rerank import NoOpReranker, apply as apply_rerank
         if not isinstance(reranker, NoOpReranker):
-            hits = apply_rerank(reranker, query, hits, top_k, result.notes)
+            # A second stage is a *re-ranker*, not a second search: it sees the
+            # top of the first stage's list, not all 60 candidates. Measured —
+            # handing it everything made a cross-encoder allocate 755 MB and
+            # fail on a 2 GB machine.
+            window = int(((cfg.get("rerank", {}) or {}).get("window", 20)) or 20)
+            window = max(top_k, window)
+            hits = apply_rerank(reranker, query, hits[:window], top_k, result.notes)
             result.reranked_by = getattr(reranker, "name", "")
 
     result.hits = hits[:top_k]
