@@ -8,6 +8,26 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 49 — Part 24: communities by label propagation · PR #45
+
+- `vrusha/store/communities.py` — label propagation over the entity graph; nodes
+  visited in sorted order, ties to the smaller label, ids renumbered densely;
+  `build()`, `community_of()`, `members()` ordered by degree
+- `bench/registry.py` — `communities`; `docs/benchmarks/14-communities.md`
+- `tests/test_communities.py` — 11 tests
+
+**Measured:** a synthetic graph of 20 clusters × 10 members with no cross-links —
+**20 of 20 communities found, in 1.19 ms.** A known-shape graph is the only honest
+benchmark here: "some number of communities" on real text proves nothing without a
+gold partition.
+
+**Determinism was designed in, not discovered:** the first sketch used
+`max(counts, key=counts.get)`, which returns the first key in insertion order and
+so varies with how the edges arrived. It was replaced with an explicit smallest-label
+tie-break before any test ran, and five repeat runs are now asserted to agree.
+
+---
+
 ## Wave 48 — Part 23: relations with evidence · PR #44
 
 - `vrusha/store/edges.py` — nine business predicates, each edge carrying **the
