@@ -285,9 +285,25 @@ def safe_compact(store, index_dir: str, cfg=None, *, stale_lock_s: float = 900.0
                     os.unlink(target)
         os.makedirs(staging, exist_ok=True)
 
+        from . import snapshot as snapshot_mod
+
         index = ann_mod.AnnIndex.build(store)
         index.save(staging)
-        # move the new files over the old ones, one at a time and atomically
+        # archive the generation being replaced, so a reader that pinned it keeps
+        # its files, then move the new files in
+        current = snapshot_mod.read_current(index_dir)["generation"]
+        if current:
+            archive = os.path.join(index_dir, f"gen-{current}")
+            os.makedirs(archive, exist_ok=True)
+            for name in os.listdir(index_dir):
+                source = os.path.join(index_dir, name)
+                if (os.path.isfile(source) and not name.startswith("gen-")
+                        and name not in (snapshot_mod.CURRENT, LOCK_FILE)):
+                    try:
+                        os.replace(source, os.path.join(archive, name))
+                    except OSError:
+                        pass
+
         moved = 0
         for name in os.listdir(staging):
             source = os.path.join(staging, name)
@@ -300,8 +316,13 @@ def safe_compact(store, index_dir: str, cfg=None, *, stale_lock_s: float = 900.0
         except OSError:
             pass
         removed = drop_segments(index_dir)
+        published = snapshot_mod.publish(index_dir)
+        # and keep only what is current, pinned, or the newest couple
+        collected = snapshot_mod.gc(index_dir)
         return {"compacted": True, "files_moved": moved,
                 "segments_removed": removed,
+                "generation": published["generation"],
+                "generations_removed": collected["removed"],
                 "seconds": round(time.perf_counter() - started, 2),
                 **stats(index_dir)}
     finally:

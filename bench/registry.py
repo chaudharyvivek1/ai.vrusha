@@ -441,6 +441,21 @@ def bench_index_delta() -> Dict[str, float]:
             "compacted": 1.0 if compacted.get("compacted") else 0.0}
 
 
+def bench_snapshot() -> Dict[str, float]:
+    """Pinning, releasing and collecting generations — the reader's side of a
+    compaction."""
+    from vrusha.store import snapshot
+
+    index_dir = tempfile.mkdtemp()
+    for _ in range(5):
+        snapshot.publish(index_dir)
+    pin = _timeit(lambda: snapshot.pin(index_dir).release(), repeats=20)
+    read = _timeit(lambda: snapshot.read_current(index_dir), repeats=50)
+    collect = _timeit(lambda: snapshot.gc(index_dir, keep=2), repeats=10)
+    return {"pin_ms": pin["p50_ms"], "read_current_ms": read["p50_ms"],
+            "gc_ms": collect["p50_ms"]}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -452,6 +467,7 @@ BENCHMARKS: List[tuple] = [
     ("extract", bench_extract, "fixtures to typed tables"),
     ("serve", bench_serve, "one request through the JSON API"),
     ("index_delta", bench_index_delta, "append vs full rebuild"),
+    ("snapshot", bench_snapshot, "pin, read and collect index generations"),
 ]
 
 
