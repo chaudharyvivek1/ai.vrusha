@@ -187,12 +187,13 @@ def test_a_rejected_table_is_not_stored(tmp_path):
 def test_extract_dir_counts_files_and_tables(tmp_path):
     store = Store(resolve(_cfg(tmp_path), "db"))
     result = records.extract_dir(store, FIXTURES, licence="MIT", verbose=False)
-    # 5 files: two html tables, one pdf, one csv, plus the two JSON-LD fixtures.
-    # The layout table in plans.html is the one rejection; catalog.html yields
-    # Product x2 and Organization from its @graph.
-    assert result["files"] == 5
+    # 6 files: two html tables, one pdf, one csv, two JSON-LD fixtures, and
+    # euler.html which carries three formulae. The layout table in plans.html
+    # is the one rejection; catalog.html yields Product x2 and Organization.
+    assert result["files"] == 6
     assert result["tables"] == 6
     assert result["rows"] == 13
+    assert result["equations"] == 3
     assert result["rejected"] == 1
 
 
