@@ -8,6 +8,31 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 44 — Part 19: upsert and delete, and two old bugs they exposed · PR #40
+
+- `vrusha/store/delta.py` — `upsert()` writes the new vector **and** a tombstone;
+  `delete()` writes only a tombstone; the merge settles each chunk id at its
+  newest mention, newest segment first
+- `vrusha/store/db.py` — `iter_vectors()` now joins `chunks` and skips
+  `active = 0`
+- `bench/registry.py` — `index_delta` measures upsert and delete too
+- `tests/test_delta.py` — 7 more tests
+
+**Measured:** `append 14.06 ms · upsert 13.71 ms · delete 16.34 ms` against
+`rebuild 442.92 ms` — **31×**. An upsert costs the same as an append.
+
+**Two bugs, both in older code, both found by this part:**
+
+1. **`load_segments()` filtered on `rows`**, so a delete-only segment — which has
+   zero vectors by definition — was discarded and its tombstones with it. Deleted
+   chunks came back.
+2. **A deactivated chunk survived every index rebuild.** `iter_vectors()` never
+   joined `chunks`, so `AnnIndex.build()` indexed retired chunks too, and
+   compaction resurrected them. This predates delta and would have stayed
+   invisible without a delete path to expose it.
+
+---
+
 ## Wave 43 — Part 18: delta segments, 24× faster than a rebuild · PR #39
 
 Phase 3. An append no longer rewrites the index.

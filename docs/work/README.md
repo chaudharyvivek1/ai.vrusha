@@ -50,7 +50,7 @@ Status: `[x]` done · `[~]` partly · `[ ]` not started · `[-]` deliberately sk
 | # | part | status |
 |---|---|---|
 | 18 | delta segments | `[x]` | [part-18](part-18-delta-index.md) — **24× faster than a rebuild** |
-| 19 | upsert and delete | `[ ]` |
+| 19 | upsert and delete | `[x]` | [part-19](part-19-upsert-delete.md) |
 | 20 | background compaction | `[ ]` |
 | 21 | versioned snapshots | `[ ]` |
 
@@ -140,6 +140,7 @@ look".
 | before Part 15 | `ruff`, the 40-question run, the benchmark inventory | 39 modules had no benchmark — now measured or exempted with a reason |
 | before Part 16 | `ruff`, the 40-question run | the reranker was handed all 60 candidates, not the top of the list |
 | before Part 18 | `ruff`, the 40-question run, the benchmark table | nothing — clean |
+| before Part 19 | `ruff`, the delta tests | nothing — clean; the bugs came *from* Part 19's own tests |
 
 ## The benchmark list
 

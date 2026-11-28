@@ -492,9 +492,15 @@ class Store:
         batch = max(1, int(batch))
         cursor = int(after)
         while True:
+            # `active = 1`: a chunk that was merged away must not be indexed.
+            # Without this join a rebuild quietly resurrects every chunk the
+            # merge pass retired -- found when a deleted chunk came back after
+            # compaction in `store/delta.py`.
             rows = self.conn.execute(
-                "SELECT chunk_id, dim, dtype, blob FROM vectors "
-                "WHERE chunk_id > ? ORDER BY chunk_id LIMIT ?",
+                "SELECT v.chunk_id, v.dim, v.dtype, v.blob FROM vectors v "
+                "JOIN chunks c ON c.chunk_id = v.chunk_id "
+                "WHERE v.chunk_id > ? AND c.active = 1 "
+                "ORDER BY v.chunk_id LIMIT ?",
                 (cursor, batch)).fetchall()
             if not rows:
                 return
