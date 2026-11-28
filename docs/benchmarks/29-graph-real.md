@@ -13,6 +13,7 @@
 | `nodes` | 159 |
 | `communities` | 45 |
 | `predicates` | 7 |
+| `duplicates_merged` | 42 |
 
 ## Why this benchmark exists
 
@@ -24,6 +25,21 @@ concluded "this corpus cannot exercise it". Same code, different corpus:
 | edges | **0** | **124** |
 | predicates | 0 | **7** |
 | communities | — | **45** |
+
+## Resolution, wired in
+
+`entities.resolve` now runs over the graph's entity names. On this corpus it merges
+**42 names**, taking 159 nodes to **157** and 45 communities to **42** — small, and
+correctly small:
+
+```
+_ratio("alpha design technologies pvt ltd", "technologies")  -> 45.3
+threshold                                                     -> 90.0
+```
+
+A bare suffix is **not** merged into a company, because it could belong to a dozen
+of them. The remaining duplicates are an *extraction* artefact — a run truncated at
+the five-word cap — not a resolution failure.
 
 ## What it does not measure
 

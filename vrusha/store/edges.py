@@ -113,6 +113,15 @@ def extract(text: str, entities: Optional[Sequence[Entity]] = None) -> List[Edge
               if entity.confidence >= 0.5
               and entity.text.lower().strip(".") not in _NOT_AN_ARGUMENT]
     entities = usable
+
+    # Two spellings of one company were two nodes. Resolution was built in wave 26
+    # for exactly this and never wired to the edges that needed it -- found on a
+    # real corpus, where `Technologies` and `Alpha Design Technologies Pvt Ltd`
+    # both appeared as subjects.
+    from .entities import canonical_map
+    mapping = canonical_map([entity.text for entity in usable])
+    for entity in usable:
+        entity.text = mapping.get(entity.text, entity.text)
     edges: List[Edge] = []
     seen: set = set()
     for sentence, offset in sentences(text):

@@ -958,6 +958,12 @@ def bench_graph_real() -> Dict[str, float]:
         for name in sorted(os.listdir(directory)))
     entities = prose.extract(text)
     relations = edges_mod.extract(text)
+    # resolution is wired into `edges.extract`; `duplicates` counts the names it
+    # could have merged and (correctly) did not
+    from vrusha.store.entities import canonical_map
+    names = [entity.text for entity in entities if entity.confidence >= 0.5]
+    mapping = canonical_map(names)
+    duplicates = float(len([name for name, canon in mapping.items() if name != canon]))
     graph = communities.adjacency((edge.subject, edge.object) for edge in relations)
     labels = communities.propagate(graph)
     summary = communities.summarise(labels, graph)
@@ -974,7 +980,7 @@ def bench_graph_real() -> Dict[str, float]:
             "nodes": float(summary["nodes"]),
             "communities": float(summary["communities"]),
             "predicates": float(len({e.predicate for e in relations})),
-            "hops": hops}
+            "duplicates_merged": duplicates, "hops": hops}
 
 
 BENCHMARKS: List[tuple] = [

@@ -8,6 +8,31 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 66 — resolution wired into the graph · PR #63
+
+- `vrusha/store/entities.py` — `canonical_map()`: the resolver's algorithm applied to
+  a plain list of names, **keyed by the original spelling**
+- `vrusha/store/edges.py` — edges are canonicalised, so two spellings of one company
+  make one edge
+- `bench/registry.py` — `graph_real` reports `duplicates_merged`
+- `tests/test_entities.py` — 6 more tests
+
+**Measured:** 42 names merged, **159 → 157 nodes**, **45 → 42 communities**, 124
+edges unchanged.
+
+**The bug the wiring exposed:** `canonical_map` keyed its result by the *normalised*
+form and returned `{}` when two spellings normalised identically — `Acme Corp` and
+`ACME Corporation` both become `acme corporation`, so the group had one member and
+the function bailed. **The one case it exists for produced no mapping at all.**
+
+**The negative finding, which is the useful part:** a bare `Technologies` is *not*
+merged into `Alpha Design Technologies Pvt Ltd`, because the ratio is **45.3** against
+a threshold of **90** — and refusing is correct, since that suffix could belong to a
+dozen companies. The duplicate is an **extraction** artefact (a run truncated at the
+five-word cap), not a resolution failure.
+
+---
+
 ## Wave 65 — a corpus that is not documentation · PR #62
 
 Three parts ended with "this corpus cannot exercise it" — Parts 23, 26 and 35. That
