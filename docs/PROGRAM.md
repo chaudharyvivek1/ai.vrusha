@@ -121,6 +121,13 @@ is how a repo becomes unbuildable in a year.
 
 ## The plan after this one
 
+`docs/PLAN-V3.md` is now the forward plan. It compares an outside review, this
+repository and both earlier plans, and divides the work into forty parts in nine
+phases — starting with measurement, because everything else is a guess until
+retrieval quality is a number.
+
+## The earlier plan
+
 `docs/MASTER-PLAN.md` supersedes both documents below as the forward plan: it adds
 the state of the field (which benchmarks are saturated or contaminated), a
 70-skill inventory with what exists and what does not, and a six-phase plan that

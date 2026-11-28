@@ -8,6 +8,36 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 36 — Plan V3: the review, the repo, and forty parts · PR #32
+
+An outside review of the repository (28 November 2026) was read in full and
+compared against the code, point by point.
+
+- `docs/PLAN-V3.md` — what the review says, **what the repo actually contains**,
+  where the three plans agree and conflict, and forty parts in nine phases
+- `docs/README.md`, `PROGRAM.md`, `README.md` — pointers
+
+**What the review got right and the repo had already closed:** the hash embedder
+(wave 25), PDF tables (wave 12), entity resolution (wave 26).
+
+**What it got right and the repo had not:** reranking, incremental indexing,
+community detection, multi-hop, nDCG/citation/faithfulness metrics — and
+**JavaScript-rendered pages**, which my own plan had understated.
+
+**Where it changed my mind:** `MASTER-PLAN.md` said "do not adopt an external
+benchmark". That was aimed at saturated *leaderboards* and was too broad — BEIR
+and CRAG are **datasets**, and using a subset is legitimate and cheap.
+
+**Where I disagree:** the cross-encoder is not P0 — its benefit is unmeasurable
+before an eval set exists, and every cross-encoder pulls torch or ONNX. Measure
+first (Phase 0), then the seam, then the model, and only adopt it if it beats a
+lexical reranker.
+
+**The order that follows:** measurement → documents → reranking → incremental
+indexing → graph → compaction → orchestration → the review's gaps → hardening.
+
+---
+
 ## Wave 35 — the 64-slot registry, and the documentation indexed · PR #31
 
 Step 3 of `docs/AGENTS.md`, plus the documentation made navigable.
