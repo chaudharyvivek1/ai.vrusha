@@ -8,6 +8,30 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 59 — Part 35: four levels against one agent · PR #55
+
+- `vrusha/compare.py` — the same 40 questions through a single loop and through the
+  hierarchy, same embedder, same retrieval
+- `bench/registry.py` — `compare`; `docs/benchmarks/23-compare.md`
+- `tests/test_compare.py` — 5 tests
+
+**The answer: quality is identical** (recall@5 0.475 both), and it must be, because
+both call the same `retrieve()`. For single-shot questions a hierarchy cannot help —
+there is no step 2 that needs step 1's output.
+
+**The trap I did not take:** the orchestrated run looks **faster** (0.62×), but it
+was the 4-worker pool, not the hierarchy. Put the pool on the single loop and you get
+the same speed with **2 board entries instead of 42**. Reporting "orchestration is
+1.6× faster" would have been the most misleading true sentence in this repository.
+
+**Cost, concretely:** 42 board entries, 40 claims, up to 8 slots — for zero quality
+change.
+
+**Phase 6 closed.** The hierarchy is built, tested and measured; its justification is
+a multi-step corpus this project does not have yet, and the work log says so.
+
+---
+
 ## Wave 58 — Part 34: the loop over HTTP · PR #54
 
 - `vrusha/orchestrator.py` — `run_remote()`: the same loop with every board and
