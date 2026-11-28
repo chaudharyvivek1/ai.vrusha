@@ -40,7 +40,7 @@ Status: `[x]` done · `[~]` partly · `[ ]` not started · `[-]` deliberately sk
 
 | # | part | status |
 |---|---|---|
-| 14 | the reranker seam | `[ ]` |
+| 14 | the reranker seam | `[x]` | [part-14](part-14-rerank-seam.md) |
 | 15 | a lexical reranker (no model) | `[ ]` |
 | 16 | an optional cross-encoder (ONNX) | `[ ]` |
 | 17 | the honest comparison, and the decision | `[ ]` |
@@ -136,3 +136,4 @@ look".
 | before Part 2 | `ruff` on the bug classes that matter, every command, the empty-store path | 1 unused assignment in `pdf.py` that meant positioning ignored the text block; `evaluate` scored an empty store instead of refusing |
 | before Part 2 | packaging | the new `eval_sets/` directory was missing from `package-data`, so the set would not have shipped |
 | before Part 4 | `ruff`, the set loader, a full `evaluate` run | nothing — clean |
+| before Part 14 | `ruff`, the 40-question run, the set loader | nothing — clean |

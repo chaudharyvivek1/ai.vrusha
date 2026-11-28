@@ -118,6 +118,12 @@ DEFAULTS: Dict[str, Any] = {
         "min_vector_similarity": 0.05,
         "refuse_below": 0.02,
     },
+    "rerank": {
+        #: `none` until a reranker has been measured against the absence of one.
+        #: Part 15 adds a lexical reranker; Part 16 an optional cross-encoder;
+        #: Part 17 decides.
+        "backend": "none",
+    },
     "evaluate": {
         #: Currency per 1,000 tokens. Zero by default because the default answerer
         #: is local and extractive: reporting a price for a model nobody called

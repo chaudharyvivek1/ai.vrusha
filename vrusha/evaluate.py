@@ -373,7 +373,8 @@ DOCS_SET: Tuple[Item, ...] = (
 
 
 def run(store, embedder, cfg: dict, items: Sequence[Item] = DOCS_SET,
-        *, top_k: int = 5, with_answers: bool = False) -> List[Outcome]:
+        *, top_k: int = 5, with_answers: bool = False,
+        reranker=None, rerank_off: bool = False) -> List[Outcome]:
     """Ask every question, and record where the right answer came from.
 
     Retrieval is measured on every question; the answer and its citations only
@@ -396,7 +397,8 @@ def run(store, embedder, cfg: dict, items: Sequence[Item] = DOCS_SET,
     outcomes: List[Outcome] = []
     for item in items:
         started = time.perf_counter()
-        result = retrieve(store, embedder, item.question, cfg, top_k=top_k)
+        result = retrieve(store, embedder, item.question, cfg, top_k=top_k,
+                          reranker=reranker, rerank_off=rerank_off)
         hits = list(getattr(result, "hits", []) or [])
         outcome = Outcome(item=item,
                           ranked=[getattr(hit, "url", "") or "" for hit in hits],

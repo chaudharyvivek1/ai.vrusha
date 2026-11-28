@@ -86,6 +86,8 @@ class Retrieval:
     address_hint: Optional[Address] = None
     #: which engine served the vector signal, and why (see store/router.py)
     decision: Optional[dict] = None
+    #: the name of the second stage, when one ran (see rerank.py)
+    reranked_by: str = ""
 
     @property
     def empty(self) -> bool:
@@ -283,7 +285,8 @@ def _identifier_bonus(query: str, hit: Hit) -> float:
 def retrieve(store: Store, embedder, query: str, cfg: dict,
              address_hint: Optional[Address] = None,
              top_k: Optional[int] = None,
-             router=None) -> Retrieval:
+             router=None,
+             reranker=None, rerank_off: bool = False) -> Retrieval:
     """Retrieve. With a `router`, the vector signal is served by whichever
     engine the router picks (native, RagForge, exact) instead of always by
     `_vector_ranking`; everything downstream is identical, because a backend
@@ -418,6 +421,26 @@ def retrieve(store: Store, embedder, query: str, cfg: dict,
                 hit.chunk_id)
 
     hits.sort(key=_rank)
+
+    # the second stage, if one is configured. The seam lives in `rerank.py`;
+    # this is the only place the retriever knows it exists.
+    if rerank_off:
+        # an explicit opt-out beats both the config and a reranker passed in:
+        # the whole point of the switch is to run the same query without one
+        reranker = None
+    elif reranker is None:
+        from ..rerank import build_reranker
+        try:
+            reranker = build_reranker(cfg)
+        except Exception as exc:             # noqa: BLE001 - a bad name is not fatal
+            result.notes.append(f"rerank: {exc}")
+            reranker = None
+    if reranker is not None:
+        from ..rerank import NoOpReranker, apply as apply_rerank
+        if not isinstance(reranker, NoOpReranker):
+            hits = apply_rerank(reranker, query, hits, top_k, result.notes)
+            result.reranked_by = getattr(reranker, "name", "")
+
     result.hits = hits[:top_k]
     return result
 
