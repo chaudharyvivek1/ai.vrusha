@@ -56,10 +56,42 @@ class _Handler(BaseHTTPRequestHandler):
     def do_GET(self):                        # noqa: N802 - stdlib naming
         router: Router = self.server.router
         path = self.path.split("?")[0].rstrip("/") or "/"
+        if path == "/":
+            # a route index, because a JSON API nobody can discover is a JSON
+            # API nobody uses
+            return self._send(200, {
+                "service": "vrusha",
+                "routes": {
+                    "GET /": "this index",
+                    "GET /health": "liveness",
+                    "GET /stats": "vectors, dimension, backends",
+                    "GET /backends": "every vector engine and its state",
+                    "GET /tables": "extracted tables",
+                    "GET /tables/<id>": "one table, with its rows",
+                    "GET /entities": "resolved entity groups",
+                    "GET /tools": "dubforge, forge3d, cutforge: ready or not",
+                    "POST /search": "{text|vector, k, filter} -> ranked chunk ids",
+                    "POST /ask": "{question, k} -> answer with citations",
+                    "POST /math": "{expression} -> stored formulae that match",
+                },
+                "not_here": {
+                    "research": "it fetches the web; run it as a command, not a "
+                                "request that a client has to wait on",
+                },
+            })
         if path == "/health":
             return self._send(200, {"ok": True})
         if path == "/backends":
             return self._send(200, {"backends": router.report()})
+        if path == "/tables":
+            return self._tables()
+        if path.startswith("/tables/"):
+            return self._table(path.rsplit("/", 1)[-1])
+        if path == "/entities":
+            return self._entities()
+        if path == "/tools":
+            from .tools import describe_all
+            return self._send(200, {"tools": describe_all()})
         if path == "/stats":
             rows, _max = self.server.store.vector_fingerprint()
             return self._send(200, {"vectors": rows,
@@ -79,6 +111,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._search(router, body)
         if path == "/ask":
             return self._ask(body)
+        if path == "/math":
+            return self._math(body)
         return self._send(404, {"error": f"no route {path}"})
 
     def _search(self, router: Router, body: dict):
@@ -104,6 +138,42 @@ class _Handler(BaseHTTPRequestHandler):
             "hits": [{"chunk_id": chunk_id, "score": round(score, 4)}
                      for chunk_id, score in hits],
         })
+
+    def _tables(self):
+        from .store.records import list_tables
+        return self._send(200, {"tables": list_tables(self.server.store)})
+
+    def _table(self, ident: str):
+        from .store.records import table_rows
+        try:
+            table_id = int(ident)
+        except ValueError:
+            return self._send(400, {"error": f"not a table id: {ident!r}"})
+        rows = table_rows(self.server.store, table_id, limit=500)
+        if not rows:
+            return self._send(404, {"error": f"no table {table_id}"})
+        return self._send(200, {"table_id": table_id, "rows": rows})
+
+    def _entities(self):
+        from .store import entities
+        groups = entities.list_entities(self.server.store)
+        return self._send(200, {"entities": groups,
+                                "hint": None if groups else
+                                "run `vrusha entities --build`"})
+
+    def _math(self, body: dict):
+        from .store.records import search_equations
+        expression = str(body.get("expression") or "").strip()
+        if not expression:
+            return self._send(400, {"error": "send an expression"})
+        hits = search_equations(self.server.store, expression,
+                                limit=int(body.get("k") or 8))
+        if not hits:
+            return self._send(200, {"expression": expression, "matches": [],
+                                    "hint": "no stored formula matches; "
+                                            "`vrusha extract --dir <path>` reads them"})
+        return self._send(200, {"expression": expression,
+                                "matches": hits})
 
     def _ask(self, body: dict):
         from .store.query import retrieve
