@@ -8,6 +8,26 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 60 — Part 36: JavaScript-rendered pages · PR #56
+
+- `vrusha/harvest/render.py` — `NullRenderer` (default, declines), `PlaywrightRenderer`
+  (optional, lazy), free shell detection by text-to-markup ratio, and
+  `maybe_render()` which always returns a sentence saying what happened
+- `vrusha/config.py` — `harvest.render.backend: none`
+- `bench/registry.py` — `render`; `docs/benchmarks/24-render.md`
+- `tests/test_render.py` — 13 tests
+
+**Measured:** detection costs **26 µs on a shell, 116 µs on a real page** — a
+rounding error next to a 9 ms retrieval, which is the property that matters: a check
+that cost a millisecond would be a tax on every fetch to save a few.
+
+**The browser is not installed here, so its cost and success rate are unknown.** This
+part is a **seam, not an adoption** — the same distinction as the cross-encoder in
+Part 16. The default stays `none`, because turning it on would be a 300 MB decision
+made on no evidence.
+
+---
+
 ## Wave 59 — Part 35: four levels against one agent · PR #55
 
 - `vrusha/compare.py` — the same 40 questions through a single loop and through the
