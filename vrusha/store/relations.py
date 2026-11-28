@@ -163,7 +163,10 @@ def _looks_like_measure(values: Set[str]) -> bool:
             continue
         except ValueError:
             pass
-        if re.fullmatch(r"\d{4}-\d{2}-\d{2}(t[\d:]+)?", value):
+        # `normalise` folds separators, so a date arrives as `2026 11 27`:
+        # match the folded form too, or every date column becomes a "key" and
+        # two tables of dates join on nothing but the calendar
+        if re.fullmatch(r"\d{4}[- ]\d{2}[- ]\d{2}([t ][\d:]+)?", value):
             numeric += 1
     return numeric / len(values) >= _MEASURE_RATIO
 

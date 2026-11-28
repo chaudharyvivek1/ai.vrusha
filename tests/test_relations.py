@@ -62,6 +62,32 @@ def test_an_identifier_column_is_a_key(tmp_path):
     assert "price" not in columns, "a unique number is a measure, not an identity"
 
 
+def test_a_date_column_is_a_measure_not_a_key():
+    """`normalise` folds separators, so dates arrive as `2026 11 27`.
+
+    Before this was handled, two tables of dates joined on nothing but the
+    calendar: `launch = renewal` at 100% overlap.
+    """
+    folded = {relations.normalise(value)
+              for value in ("2026-11-27", "2026-12-15", "2027-01-15")}
+    assert relations._looks_like_measure(folded) is True
+    # an identifier that looks date-ish but is named like one stays a key
+    assert relations._looks_like_measure({"sh 100", "sh 200"}) is False
+
+
+def test_two_tables_of_dates_do_not_join(tmp_path):
+    store = Store(resolve(_cfg(tmp_path), "db"))
+    _store_two(store,
+               _table(["launch", "price"], [["2026-11-27", "Rs 1"],
+                                            ["2026-12-15", "Rs 2"]]),
+               _table(["renewal", "price"], [["2026-11-27", "Rs 3"],
+                                             ["2026-12-15", "Rs 4"]]))
+    joins = relations.infer_joins(store)
+    assert all("launch" not in (j.left.column, j.right.column)
+               and "renewal" not in (j.left.column, j.right.column)
+               for j in joins)
+
+
 def test_a_table_of_only_measures_has_no_keys(tmp_path):
     store = Store(resolve(_cfg(tmp_path), "db"))
     doc = store.add_document(url="https://a.test/1", title="a", text="body " * 200)
