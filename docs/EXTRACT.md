@@ -156,7 +156,7 @@ large.
 
 ## Implemented so far
 
-Steps 1 to 4 of the plan are in, with tests:
+Steps 1 to 5 of the plan are in, with tests:
 
 ```bash
 vrusha extract --dir ./pages --licence MIT    # html tables + csv -> typed rows
@@ -200,7 +200,7 @@ for `unchanged` (refresh `retrieved`) and `gone` (record the status).
 2. ~~Table extraction + schema inference for HTML/CSV~~ — done.
 3. ~~Tier 1 formulas~~ — done (`vrusha/store/formula.py`, `vrusha derive`).
 4. ~~JSON-LD and schema.org~~ — done (`vrusha/store/jsonld.py`).
-5. **PDF tables** — the hardest, which is why it is last of the sources.
+5. ~~PDF tables~~ — done (`vrusha/store/pdf.py`, no PDF dependency).
 6. **SearXNG + trafilatura** as the search/extract path behind `harvest`.
 7. **Relation inference** across tables (entity keys, join edges, confidence).
 8. **Tier 2 sandboxed scripts** — last, because it is the only irreversible
@@ -273,6 +273,33 @@ And the values arrive typed from a page that wrote them as strings:
 
 Re-extracting a document replaces its records rather than doubling them, so
 `extract` is safe to run again after a re-crawl.
+
+## PDF
+
+A PDF has no markup, so every table here is an **inference**. That is why this
+module is two stages, and why the second one is allowed to refuse:
+
+```
+extract_text_items()   bytes -> (x, y, size, text) per run
+tables_from_items()    items -> a grid, or a refusal with a reason
+```
+
+| step | how |
+|---|---|
+| objects and streams | regex over `obj ... endobj`, `zlib` for `/FlateDecode` |
+| text and position | `Tj`, `TJ`, `'`, `"`, `Td`/`TD`/`Tm`, `T*`, `Tf`, with PDF string escapes |
+| rows | shared y values, clustered to 3 points, **reversed** because a PDF's y axis points up |
+| columns | recurring x positions, clustered to 12 points |
+| a table, or not | the grid must be ≥60% full, ≥2 rows, ≥2 columns |
+| prose on the same page | split into bands by vertical gaps, so a paragraph never becomes rows |
+
+On the fixture: 13 text runs become one table of 4 rows (header + 3), with
+`price: money` and `uptime: percent` inferred, and the paragraph below it stays
+in the document text where retrieval can find it.
+
+What it will not read, and returns nothing rather than nonsense for: encryption,
+Type0/CID fonts with custom encodings, text drawn as vector outlines, rotated
+pages. A table of mojibake is worse than no table.
 
 ## Known limits, stated
 
