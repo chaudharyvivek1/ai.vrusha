@@ -8,6 +8,31 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 52 — Parts 27 and 28: compaction with verifiable summaries · PR #48
+
+- `vrusha/store/compaction.py` — compact at **85%** of a budget; offload a single
+  entry past **20,000 tokens**; a rule-based summary keeping every decision, error,
+  question and artifact reference plus the last finding per task, dropping progress,
+  and keeping the last five entries verbatim
+- **every summary carries the `seq` range it replaced**, and `verify()` checks the
+  summary against the entries in that range
+- `bench/registry.py` — `compaction`; `docs/benchmarks/17-compaction.md`
+- `tests/test_compaction.py` — 14 tests
+
+**Measured:** 53 entries, **7,579 → 1,749 tokens (23%)**, verified, in 0.13 ms.
+
+**The bug that shaped the design:** the first summary was **2.7× larger** than its
+input, because with six small entries the header and kept categories outweighed the
+text. Compaction now **declines** when it would grow the text — `useful=False`,
+`text=""`, caller keeps the entries — because compaction that grows the text has
+made the caller slower and no better off.
+
+**Why verification is the feature:** a summary that silently drops a fact produces
+confident wrong answers. Two tests break a summary deliberately and assert
+`verify()` fails.
+
+---
+
 ## Wave 51 — Part 26: bounded graph ranking, Phase 4 closed · PR #47
 
 - `vrusha/store/graphboost.py` — a chunk whose entities share a community with the
