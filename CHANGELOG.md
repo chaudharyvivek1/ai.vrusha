@@ -8,6 +8,29 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 22 — the address ranking, 142× faster · PR #18
+
+The largest remaining cost in the retriever, fixed.
+
+- `vrusha/store/query.py` — `_address_ranking` scores a cached integer matrix in
+  numpy instead of parsing every address and calling `semantic_similarity` per
+  chunk; same rule, same order, verified against the function it replaced
+- `vrusha/store/db.py` — `chunk_revision()`, a `meta` counter maintained by
+  **SQLite triggers** on `chunks`, so every write path invalidates the cache
+  including the raw-SQL ones in `passes.py`
+- `bench/address.py` — before and after, on the same store
+- `tests/test_address_ranking.py` — 10 tests, the important one being equality
+  with the old implementation
+
+**20,000 addressed chunks: 349.2 ms → 2.46 ms (142×), identical results.**
+
+Two avoidable causes: `Address.parse` ran 20,000 times per query to recover five
+numbers that were already columns, and a per-chunk Python function that
+vectorises completely. Wave 7's lesson applied in advance: the freshness check is
+a trigger-maintained counter, not a `COUNT(*)`.
+
+---
+
 ## Wave 21 — does the vector mean anything? · PR #17
 
 Re-ran retrieval quality with the real embedder, on labelled queries, and the
