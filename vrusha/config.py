@@ -44,6 +44,10 @@ DEFAULTS: Dict[str, Any] = {
         #: nothing in the CLI does, and no rule can turn it on.
         "allow_private": False,
     },
+    "extract": {
+        #: `none` keeps the core dependency-free; `tesseract` needs a system binary
+        "ocr": {"backend": "none"},
+    },
     "harvest": {
         "max_pages": 40,               # per crawl run
         "max_depth": 2,
@@ -117,6 +121,10 @@ DEFAULTS: Dict[str, Any] = {
         # below this cosine a vector hit is noise, not a near miss
         "min_vector_similarity": 0.05,
         "refuse_below": 0.02,
+    },
+    "extract": {
+        #: `none` keeps the core dependency-free; `tesseract` needs a system binary
+        "ocr": {"backend": "none"},
     },
     "harvest": {
         #: `none` keeps the core dependency-free. `playwright` needs a 300 MB
