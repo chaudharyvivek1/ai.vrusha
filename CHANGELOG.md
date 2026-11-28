@@ -8,6 +8,30 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 64 — Part 40: fuzzing, and the programme closed · PR #61
+
+- `tests/test_fuzz.py` — **44 fuzz cases** across HTML extraction, CSV, JSON-LD, the
+  blackboard, the safety scanner, the maths canonicaliser, the JSON API and the BEIR
+  loader; deterministic seeds
+- `bench/registry.py` — `fuzz`; `docs/benchmarks/28-fuzz.md`
+
+**Nothing crashed.** All 44 cases passed on the first run, and the reason is the
+shape of the code: this project's parsers return `[]`, `{}` or a declared error on
+rubbish, and `beir.load` raises `BeirError` with the line number.
+
+**The one that would have crashed and did not:** four malformed API bodies (`{`,
+`[]`, `{"run": 123}`, `\x00\xff`) all produce a **4xx**, not a 500 and not a hang —
+the Part 33 fix, still holding under fuzzing three parts later.
+
+**Measured:** 40 payloads, **0 crashes**, 157/s.
+
+**The programme is closed.** All 40 parts of `docs/PLAN-V3.md` are done or explicitly
+declined — except **Phase 1 (documents, 8 parts), which was never started**, and that
+is the honest summary: the plan put documents after measurement, and the measurement
+kept being more useful.
+
+---
+
 ## Wave 63 — Part 39: the injection surface · PR #60
 
 - `vrusha/safety.py` — nine patterns for text written to be obeyed, with severities,
