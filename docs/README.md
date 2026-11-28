@@ -37,6 +37,7 @@ next person does not have to open all of them.
 | [ANN.md](ANN.md) | the vector index: IVF, int8, rescore |
 | [BACKENDS.md](BACKENDS.md) | exact, native IVF, sqlite-vec, RagForge behind one router |
 | [BENCHMARKS.md](BENCHMARKS.md) | every number, on synthetic and on real embeddings |
+| [benchmarks/](benchmarks/) | **one report per subsystem**, generated from the harness |
 | [EVALUATE.md](EVALUATE.md) | retrieval and answer metrics, and the two numbers that are not numbers |
 | [SERVE.md](SERVE.md) | the JSON API and its routes |
 | [MODEL.md](MODEL.md) | the tokeniser and the small model |

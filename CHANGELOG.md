@@ -8,6 +8,28 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 45 — Part 20: compaction, and a benchmark report per subsystem · PR #41
+
+- `vrusha/store/delta.py` — `safe_compact()` builds the new base in `<index>.new`
+  and moves the files over one at a time; a lock file (`O_EXCL`) allows one
+  compactor at a time; a lock older than `stale_lock_s` is **broken**, because a
+  lock nobody releases is an outage
+- `docs/benchmarks/` — **ten reports**, one per subsystem, generated from the
+  harness, each with its numbers, its method and how to reproduce it
+- `bench/registry.py` — `index_delta` now measures compaction too
+
+**Measured:** compaction 354.56 ms against a rebuild's 350.01 ms — it *is* the
+expensive operation, which is why the delta verbs (~20 ms, **16.6× cheaper**) make
+deferring it worth doing.
+
+**The recheck found the sharpest version of the project's oldest rule.** The
+`retrieval` benchmark did not record which embedder ran: on a pod without
+model2vec it falls back to the deterministic hash and `recall@5` reads **0.47**
+where the same set scores **0.70**. Same code, same corpus, a third of the
+quality, and nothing in the output said which. It now reports `model2vec=1|0`.
+
+---
+
 ## Wave 44 — Part 19: upsert and delete, and two old bugs they exposed · PR #40
 
 - `vrusha/store/delta.py` — `upsert()` writes the new vector **and** a tombstone;

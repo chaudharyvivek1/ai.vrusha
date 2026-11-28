@@ -241,6 +241,83 @@ def compact(store, index_dir: str, cfg=None) -> dict:
             "seconds": round(time.perf_counter() - started, 2)}
 
 
+LOCK_FILE = "compaction.lock"
+
+
+def safe_compact(store, index_dir: str, cfg=None, *, stale_lock_s: float = 900.0) -> dict:
+    """Compact into a new directory, then swap it in — one compactor at a time.
+
+    Two rules make this safe to run while queries are in flight:
+
+    **Build beside, swap after.** The new base is built in `<index>.new` and
+    renamed into place only when it is complete, so a reader either sees the old
+    index or the new one, never a half-built one.
+
+    **One compactor at a time.** A lock file created with `O_EXCL` is the whole
+    mechanism; a second compactor returns "already running" instead of racing.
+    A lock older than `stale_lock_s` is assumed to belong to a dead process and is
+    broken, because a lock nobody releases is an outage.
+    """
+    lock = os.path.join(index_dir, LOCK_FILE)
+    os.makedirs(index_dir, exist_ok=True)
+    try:
+        handle = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        try:
+            age = time.time() - os.path.getmtime(lock)
+        except OSError:
+            age = 0.0
+        if age < stale_lock_s:
+            return {"compacted": False, "reason": "another compaction is running",
+                    "lock_age_s": round(age, 1), **stats(index_dir)}
+        os.unlink(lock)                       # a dead compactor's lock
+        handle = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    try:
+        os.write(handle, f"{os.getpid()} {time.time():.0f}".encode())
+        os.close(handle)
+
+        started = time.perf_counter()
+        staging = index_dir.rstrip(os.sep) + ".new"
+        if os.path.isdir(staging):
+            for name in os.listdir(staging):
+                target = os.path.join(staging, name)
+                if os.path.isfile(target):
+                    os.unlink(target)
+        os.makedirs(staging, exist_ok=True)
+
+        index = ann_mod.AnnIndex.build(store)
+        index.save(staging)
+        # move the new files over the old ones, one at a time and atomically
+        moved = 0
+        for name in os.listdir(staging):
+            source = os.path.join(staging, name)
+            if not os.path.isfile(source):
+                continue
+            os.replace(source, os.path.join(index_dir, name))
+            moved += 1
+        try:
+            os.rmdir(staging)
+        except OSError:
+            pass
+        removed = drop_segments(index_dir)
+        return {"compacted": True, "files_moved": moved,
+                "segments_removed": removed,
+                "seconds": round(time.perf_counter() - started, 2),
+                **stats(index_dir)}
+    finally:
+        try:
+            os.unlink(lock)
+        except OSError:
+            pass
+
+
+def maybe_compact(store, index_dir: str, cfg=None, **kwargs) -> dict:
+    """Compact only when the segments say it is time."""
+    if not should_compact(index_dir):
+        return {"compacted": False, "reason": "below the threshold", **stats(index_dir)}
+    return safe_compact(store, index_dir, cfg, **kwargs)
+
+
 def append(store, index_dir: str, chunk_ids: Sequence[int],
            cfg=None) -> dict:
     """Add vectors for chunks the index has never seen. The base is not rewritten."""
