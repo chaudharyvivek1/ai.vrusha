@@ -1,0 +1,61 @@
+Bharti Airtel is an Indian multinational telecommunications company, headquartered in New Delhi. It operates in 18 countries across the Indian subcontinent, Africa, and the Channel Islands. In India, the company provides mobile telephony services using 5G, 4G, and LTE Advanced technologies, along with fixed-line broadband and voice services, while the range of services varies by country of operation.
+Airtel is the largest mobile network operator in India and second largest mobile network operator in the world. It has also deployed Voice over LTE (VoLTE) technology across telecom circles in India to support voice calls over 4G networks.
+
+
+== History ==
+In 1984, Sunil Mittal started assembling push-button phones in India, which he earlier used to import from a Singaporean company, Singtel, replacing the old-fashioned, bulky rotary phones that were in use in the country then. Bharti Telecom Limited (BTL) was incorporated and entered into a technical tie-up with Siemens AG of Germany for the manufacture of electronic push-button phones. By the early 1990s, Bharti was making fax machines, cordless phones and other telecom gear. He named his first push-button Telephone as 'Mitbrau'.
+In 1992, he successfully bid for one of the four mobile phone network licenses auctioned in India. One of the conditions for the Delhi cellular licenses was that the bidder have some experience as a telecom operator. So, Mittal clinched a deal with the French telecom group Vivendi. He was one of the first Indian entrepreneurs to identify the mobile telecom business as a major growth area. His plans were finally approved by the Government in 1994 and he launched services in Delhi in 1995, when Bharti Cellular Limited (BCL) was formed to offer cellular services under the brand name AirTel. Within a few years, Bharti became the first telecom company to cross the 2 million mobile subscriber mark. Bharti also brought down the STD/ISD cellular rates in India under the brand name 'India one'.
+In 1999, Bharti Enterprises acquired control of JT Holdings, and extended cellular operations to Karnataka and Andhra Pradesh. In 2000, Bharti acquired control of Skycell Communications, in Chennai. In 2001, the company acquired control of Spice Cell in Kolkata. Bharti Enterprises went public in 2002, and the company was listed on Bombay Stock Exchange and National Stock Exchange of India. In 2003, the cellular phone operations were re-branded under the single Airtel brand. In 2004, Bharti acquired control of Hexacom and entered Rajasthan. In 2005, Bharti extended its network to Andaman and Nicobar. This expansion allowed it to offer voice services all across India.
+In July 2004, Airtel launched "Hello Tunes", a caller ring back tone service (Ringing Tone), becoming the first operator in India to do so. The Airtel theme song was composed by A. R. Rahman.
+
+In 2009, Bharti negotiated for its strategic partner Alcatel-Lucent to manage the network infrastructure for the fixed-line business. Later, Bharti Airtel awarded the three-year contract to Alcatel-Lucent for setting up an Internet Protocol access network across the country. This would help consumers access internet at faster-speed and high-quality internet browsing on mobile handsets.
+In 2009, Airtel launched its first international mobile network in Sri Lanka. In June 2010, Bharti acquired the African business of Zain Telecom for $10.7 billion, making it the largest ever acquisition by an Indian telecom firm. In 2012, Bharti tied up with Walmart, the US retail giant, to start a number of retail stores across India. In 2014, Bharti planned to acquire Loop Mobile for ₹7 billion (US$75 million), but the deal was called off later.
+On 18 November 2010, Airtel rebranded itself in India in the first phase of a global rebranding strategy. The company unveiled a new logo with 'airtel' written in lower case. Designed by London-based brand agency, Superunion, the new logo is the letter 'a' in lowercase, with 'airtel' written in lowercase under the logo. On 23 November 2010, Airtel's Africa operations were rebranded to 'airtel'. Sri Lanka followed on 28 November 2010 and on 20 December 2010, Warid Telecom rebranded to 'airtel' in Bangladesh.
+In May 2024, Bharti Airtel announced a collaboration with Google Cloud to support cloud adoption and the development of generative AI solutions for businesses in India.
+In July 2024, Bharti Airtel and Nokia successfully completed India's first non‑standalone (NSA) 5G Cloud‑RAN trial. The trial, conducted over the air using commercial spectrum in the 3.5 GHz (5G) and 2.1 GHz (4G) bands, achieved data throughput of over 1.2 Gbit/s.
+In December 2024, Bharti Airtel signed a “multi‑billion” dollar deal with Ericsson to deploy centralized and Open‑RAN‑ready solutions and upgrade 4G/5G radios, aiming to improve network speed, coverage, and reliability.
+In March 2025, Bharti Airtel entered into a strategic agreement with SpaceX's Starlink to explore the introduction of satellite-based internet services in India, leveraging Airtel's existing retail and enterprise distribution channels. The collaboration remains subject to regulatory approvals from Indian authorities.
+
+
+=== Acquisitions and mergers ===
+
+
+==== MTN Group merger negotiations ====
+In May 2006, it emerged that Airtel was exploring the possibility of buying the MTN Group, a South Africa-based telecommunications company with operations in 21 countries in Africa and the Middle East, founded by Leena Jaitley. Financial Times reported that Bharti was considering offering US$45 billion for a 100% stake in MTN, which would be the largest overseas acquisition ever by an Indian firm. However, both sides emphasized the tentative nature of the talks. The Economist magazine noted, "If anything, Bharti would be marrying up", as MTN had more subscribers, higher revenues and broader geographic coverage. However, the talks fell apart as MTN Group tried to reverse the negotiations by making Bharti almost a subsidiary of the new company.
+In May 2009, Airtel confirmed that it was again in talks with MTN and both companies agreed to discuss the potential transaction exclusively by 31 July 2009. Airtel said "Bharti Airtel Ltd is pleased to announce that it has renewed its effort for a significant partnership with MTN Group". The exclusivity period was extended twice up to 30 September 2009. Talks eventually ended without agreement.
+A solution was proposed where the new company would be listed on two stock exchanges, one in South Africa and one in India. However, dual-listing of companies is not permitted by Indian law.
+
+
+==== Acquisition of Zain's Africa operations ====
+
+In June 2010, Bharti struck a deal to buy Zain's mobile operations in 15 African countries, in India's second-biggest overseas acquisition after Tata Steel's $13 billion buy of Corus in 2007. Bharti Airtel completed its $10.7 billion acquisition of African operations from the Kuwaiti firm on 8 June 2010, making Airtel the world's fifth largest wireless carrier by subscriber base. Airtel has reported that its revenues for the fourth quarter of 2010 grew by 53% to US$3.2 billion compared to the previous year, newly acquired Zain Africa division contributed US$911 million to the total. However, net profits dropped by 41% from US$470 million in 2009 to US$291 million in 2010 due to a US$188 million increase in radio spectrum charges in India and an increase of US$106 million in debt interest.
+
+
+==== Warid Bangladesh and Robi ====
+
+In 2010, Warid Telecom sold a majority 70.90% stake in the company to Bharti Airtel for US$300 million. The Bangladesh Telecommunication Regulatory Commission approved the deal on 4 January 2010. Bharti Airtel Limited took management control of the company and its board, and rebranded the company's services under its own "airtel" brand from 20 December 2010. Warid Telecom sold its remaining 30% share to Bharti Airtel's Singapore-based concern Bharti Airtel Holdings Pte Limited in March 2013.
+On 16 November 2016, Airtel Bangladesh was merged into Robi as a product brand of Robi, where Robi Axiata Limited is the licensee of airtel brand in Bangladesh. Robi is a joint venture between Malaysian telecom operator Axiata holding 61.82% and Bharti Airtel holding 28.18%.
+
+
+==== Telecom Seychelles ====
+On 11 August 2010, Bharti Airtel announced that it would acquire a 100% stake in Telecom Seychelles for US$62 million taking its global presence to 19 countries. Telecom Seychelles began operations in 1998 and operates 3G, fixed-line, ship to shore services, satellite telephony, among value added services like VSAT and Gateways for International Traffic across Seychelles under the Airtel brand. The company has over 57% share of the mobile market of Seychelles. Airtel announced plans to invest US$10 million in its fixed and mobile telecoms network in Seychelles over three years, whilst also participating in the Seychelles East Africa submarine cable (SEAS) project. The US$34 million SEAS project is aimed at improving Seychelles' global connectivity by building a 2,000 km undersea high-speed link to Dar es Salaam in Tanzania.
+
+
+==== Wireless Business Services Private Limited ====
+On 24 May 2012, Airtel announced an agreement to acquire a 60% stake in Wireless Business Services Private Limited (WBSPL) at an investment of ₹9.07 billion (US$97 million). WBSPL was a joint venture founded by Qualcomm and held BWA spectrum in the telecom circles of Delhi, Haryana, Kerala and Mumbai. Qualcomm had spent US$1 billion to acquire BWA spectrum in those 4 circles. The deal gave Airtel a 4G presence in 18 circles. On 4 July 2013, Airtel announced that it had acquired an additional 5% equity share capital (making its stake 51%) in all the four BWA entities of Qualcomm, thereby making them its subsidiaries. On 18 October 2013, Airtel announced that it had acquired 100 percent equity shares of WBSPL for an undisclosed sum, making it a wholly owned subsidiary.
+
+
+==== Augere Wireless ====
+Airtel purchased Augere Wireless Broadband India Private Limited, a company that owned 4G spectrum in the Chhattisgarh-Madhya Pradesh circle for an undisclosed sum in December 2015. The Economic Times estimated Augere's spectrum to be worth ₹1.5 billion (US$16 million). On 16 February 2017, Airtel announced that the merger of Augere Wireless into Bharti Airtel Limited had been completed.
+
+
+==== Telenor India ====
+On 2 January 2017, The Economic Times reported that Airtel had entered into discussions with Telenor India to acquire the latter. On 23 February 2017, Airtel announced that it had entered into a definitive agreement to acquire Telenor. As part of the deal, Airtel will acquire Telenor India's assets and customers in all seven telecom circles that the latter operates in - Andhra Pradesh, Bihar, Maharashtra, Gujarat, Uttar Pradesh (East), Uttar Pradesh (West) and Assam. Airtel will gain a 43.4 MHz spectrum in the 1800 MHz band from the Telenor acquisition. Business Standard reported that it was a no-cash deal, but would cost Airtel ₹1,600 crore over a 10-year period due to spectrum license payments.
+
+
+==== Tikona 4G spectrum ====
+On 23 March 2017, The Economic Times reported that Airtel had acquired Tikona Infinet Limited's 4G spectrum for approximately ₹1,600 crores. The deal also includes Tikona's 350 cellular sites in 5 circles. Tikona had purchased 20 MHz of 4G spectrum in the 2,300 MHz band in the 2010 auctions in Gujarat, Himachal Pradesh, Uttar Pradesh (East), Uttar Pradesh (West) and Rajasthan for ₹1,058 crores. Prior to the deal, Airtel did not hold any spectrum in the 2300 MHz band in UP (East), UP (West) and Rajasthan, and held 10 MHz each in Gujarat and Himachal Pradesh. Tikona's co-founder Rajesh Tiwari sent a legal notice to both companies for not providing details regarding the splitting of proceeds among shareholders.
+
+
+==== Tigo Rwanda ====
+Bharti Airtel announced on 12 December 2017 that its Rwandan subsidiary had signed an agreement with Mi

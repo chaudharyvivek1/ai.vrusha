@@ -8,6 +8,28 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 69 — a denser graph, and the boost still does nothing · PR #66
+
+- `examples/corpora/wiki-companies/` — **23 more articles** (15 → **38**), fetched
+  with backoff instead of skipping
+- `bench/registry.py` — `graph_real` counts articles from the folder
+
+**The graph at 2.4× density:** 296 edges, 390 nodes, 115 communities, largest 16,
+**37 of 38 chunks mapped to a community**.
+
+**And the boost still moves nothing:** 0.000 delta on recall@1, recall@5, nDCG@10 and
+MRR across 15 questions. Wave 67 found it could not *fire*; this shows that with the
+bug fixed **and** the graph denser, it does not *help* either.
+
+**The conclusion is now measured:** keep `graph.boost: false`. The graph's value is
+the entity and relation data, not a ranking boost.
+
+**Also:** retrieval got harder as it should — recall@1 fell 0.400 → 0.333 and recall@5
+0.800 → 0.667 with 38 documents instead of 15. A benchmark whose numbers do not move
+when the corpus grows is measuring the corpus, not the retriever.
+
+---
+
 ## Wave 68 — a bare corporate suffix is not a name · PR #65
 
 - `vrusha/store/prose.py` — a one-word run that is a bare corporate suffix is

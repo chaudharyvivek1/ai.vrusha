@@ -6,14 +6,15 @@
 
 | metric | value |
 |---|---|
-| `articles` | 15 |
-| `chars` | 153,787 |
+| `articles` | 38 |
+| `chars` | ~363,000 |
 | `entities` | 2,658 |
-| **`edges`** | **124** |
-| `nodes` | 159 |
-| `communities` | 45 |
+| **`edges`** | **296** |
+| `nodes` | 390 |
+| `communities` | 115 |
 | `predicates` | 7 |
 | `duplicates_merged` | 42 |
+| `largest_community` | 16 |
 
 ## Why this benchmark exists
 
@@ -47,3 +48,19 @@ the five-word cap — not a resolution failure.
 - entity quality: one entity still appears at two lengths (`Technologies` and
   `Alpha Design Technologies Pvt Ltd`), which `entities.resolve` exists to fix and
   is not yet wired in.
+
+
+## The boost, measured twice
+
+With the query-to-community bug fixed (wave 67) and the graph 2.4x denser (wave 69),
+the boost still moves **nothing**:
+
+| metric | off | on | delta |
+|---|---|---|---|
+| recall@1 | 0.333 | 0.333 | +0.000 |
+| recall@5 | 0.667 | 0.667 | +0.000 |
+| nDCG@10 | 0.537 | 0.537 | +0.000 |
+| MRR | 0.461 | 0.461 | +0.000 |
+
+**Keep it off.** The graph's value is the entity and relation data, not a ranking
+boost. That is now a measured conclusion, not a corpus gap.

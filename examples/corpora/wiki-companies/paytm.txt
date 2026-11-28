@@ -1,0 +1,84 @@
+PayTM (short for Pay Through Mobile) is an Indian multinational financial technology company, that specializes in digital payments and financial services, based in Noida. PayTM was founded in 2010 by Vijay Shekhar Sharma under One97 Communications. The company offers mobile payment services to consumers and enables merchants to receive payments through QR code payment, Soundbox, Android-based-payment terminal, and online payment gateway. In partnership with financial institutions, PayTM also offers financial services such as microcredit and buy now, pay later to its consumers and merchants.
+Apart from bill payments and money transfer, the company also provides ticketing services, retail brokerage products and online games.
+PayTM's parent company One97 Communications was listed on the Indian stock exchanges on 18-November-2021 after an initial public offering, which was the largest in India at the time. For the fiscal year 2022–23, Paytm's gross merchandise value (GMV) was reported to be ₹13.2 lakh crore (US$140 billion).
+PayTM's profit improved to ₹211 crore for the quarter ending September-2025. In July-2021, the company filed the offer document for what was then India's largest initial public offering (IPO). It successfully listed on Indian stock exchanges on 18-November-2021. PayTM's Rs 18,300-crore IPO was oversubscribed 1.89 times on the last day of India’s biggest share sale.
+
+
+== History ==
+
+
+=== Early history; 2010-2019 ===
+PayTM was founded in August-2010 with an initial investment of US$2 million by its founder Vijay Shekhar Sharma in Noida, Delhi NCR. It began as a prepaid mobile and DTH recharge platform, and later added debit card, postpaid mobile and landline bill payments in 2013.
+In October-2011, Sapphire Ventures (fka SAP Ventures) invested $10 million in One97 Communications Ltd. By January-2014, the company had launched the PayTM Wallet, which the Indian Railways and Uber added as a payment option. In 2015, it added education fees, metro recharges, electricity, gas, and water bill payments. It also launched bus ticketing and travel booking.
+In 2015, China's Alibaba Group and its affiliate Ant Financial increased their combined stake in PayTM to 40%, making them its largest shareholders. The same year, it raised funding from Ratan Tata, the MD of Tata Sons. In August 2016, PayTM raised funding from MediaTek's investment fund at a valuation of over $5 billion. Also in 2016, it launched movies, events and amusement parks ticketing, PayTM QR, and train ticket bookings. California-based PayPal filed a case against PayTM in the Indian trademark office for using a logo with a similar colour combination to its own on 18-November-2016.
+In May-2017, PayTM raised $1.4 billion from SoftBank, at a valuation of over $8 billion. In August-2018, Berkshire Hathaway invested $356 million in PayTM, although Berkshire Hathaway confirmed that Warren Buffett was not involved in the transaction.
+In 2017, PayTM launched PayTM Gold, allowing users to buy digital gold. It also launched Paytm Payments Bank and ‘Inbox’, a messaging platform with in-chat payments. By 2018, it started allowing merchants to accept PayTM, UPI and card payments into their bank accounts. It also launched the "PayTM for Business" app (now called Business with PayTM App) for merchants.
+In June-2019, PayTM rebranded Gamepind, their mobile gaming platform as PayTM First Games. It was rebranded as PayTM First Games in June-2019. In March-2018, PayTM Money was started with an investment of ₹9 crore for investment and wealth management.
+In March-2019, the firm launched a subscription based loyalty program called PayTM First. In May-2019, it partnered with Citibank to launch PayTM First credit card. On 25-November-2019, PayTM raised $1 billion in a funding round led by US asset manager T Rowe Price along with existing investors Ant Financial and SoftBank Vision Fund.
+
+
+=== 2020-present ===
+In July-2020, Tata Starbucks partnered with PayTM allowing its customers to order food online during the COVID-19 pandemic.
+On 18-September-2020, the firm's official app was briefly unlisted from the Google Play allegedly due to violations of the Play Store's gambling policy. The company claimed that Google did not offer any prior warning or give the company an opportunity to explain its views on the contentious 'cashback' offers while claiming that Google's own payments app Google Pay offered similar 'cashback' offers and suffered no repercussions.
+In July-2021, One97 Communications filed a draft red herring prospectus with the Securities and Exchange Board of India to launch its initial public offering (IPO). It launched its IPO in November-2021, raising ₹18,300 crore (US$2.0 billion) at a valuation of US$20 billion. It was the largest ever IPO in India. The shares began trading on 18-November-2021, opening at ₹1,950 on the NSE, 9.3% below the upper band of the IPO price range, and closed down more than 27% at ₹1,560, making it the biggest drop on a listing day in Indian IPO history.
+In December-2021, PayTM launched PayTM Wealth Academy. In March-2022, the Reserve Bank of India barred Paytm Payments Bank from signing up new customers after an inspection found that the company was leaking customer data to China-based entities which indirectly owned a stake in PayTM Payments Bank.
+On 31-January-2024, Reserve Bank of India, the banking regulator in India, ordered PayTM Payments Bank Ltd to stop the bulk of its activities from 29-February-2024. RBI found that the company did not conduct proper background checks on the source of funds before onboarding clients. This date was further extended to 15-March-2024 as per the updated FAQ. It may lead to 20% work force cut down.
+In August-2024, Zomato acquired PayTM's entertainment ticketing business, including the PayTM Insider and TicketNew platforms, for approximately ₹2,048 crore (US$244 million). The acquired platforms would continue operating for up to 12 months during a phased transition, with eventual integration into Zomato's District app.
+On 24-April-2026, the Reserve Bank of India, cancelled the license of PayTM Payments Bank Ltd, severely impacting its activities.
+
+
+== Funding and shareholding ==
+
+Post-IPO shareholding (as of April 2024):
+
+
+== Acquisitions ==
+In 2013, PayTM acquired Plustxt for under $2 million; the platform allowed fast text messaging in Indian languages.
+In 2016, it acquired Delhi-based consumer behaviour prediction platform Shifu and local services startup Near.in. In July-2017, it acquired a majority stake in online ticketing and events platform Insider.in, from event management company Only Much Louder (OML). In 2017, it acquired restaurant deals platform Little and hyperlocal e-commerce company nearbuy.com in 2017, and merged the two companies.
+PayTM acquired the startup Cube26 in January-2018. In May-2018, PayTM acquired movie ticket booking platform TicketNew for around $40 million. It acquired the hotel booking platform NightStay in 2019.
+In October-2021, PayTM acquired digital lending company CreditMate.
+
+
+=== Other investments ===
+PayTM invested $5 million in auto-rickshaw aggregator and hyperlocal delivery firm Jugnoo in 2015. In 2016, it invested in logistics startups LogiNext and XpressBees. In April-2017, PayTM invested in healthcare artificial intelligence (AI) startup QorQL. It also invested in mobile loyalty program and analytics startup MobiQuest.
+
+
+== International expansion ==
+
+
+=== Japan ===
+
+PayTM established a joint venture with SoftBank and Yahoo! Japan, called PayPay Corporation, to offer services in the Japanese market. PayTM launched the PayPay app, a QR-based payment settlement service, in Japan on 22-October-2018.
+
+
+=== Canada ===
+PayTM Labs Inc. was established in Toronto, Ontario in 2014 as a research and development division. It recently launched a fraud risk management platform called Pi for fintechs and digital marketplaces where transaction value is high.
+
+
+=== Saudi Arabia, UAE, Singapore, Indonesia and Luxembourg ===
+In January 2025, Paytm expanded its operations to the United Arab Emirates, Saudi Arabia and Singapore . In December 2025, Paytm announced the incorporation of overseas subsidiaries: Indonesia and Luxembourg, and partnership in the UAE through investment by Abbar Global Opportunities Holdings Limited in Paytm Arab Payments L.L.C.
+
+
+== Innovations ==
+
+PayTM has been a significant driver of the digital payment revolution in India, launching several industry-first technological products that have shaped the nation's fintech ecosystem. They have popularised mobile QR code payment system in India. In 2019, PayTM invented the PayTM Soundbox, an IoT device that provides instant audio confirmations for successful transactions. In 2026, the company developed the PayTM AI Router, that acts as a self-learning routing system that intelligently directs online payment traffic across multiple payment gateways in real-time.
+
+
+== Artificial intelligence ==
+PayTM has incorporated artificial intelligence (AI) technologies across various aspects of its products, services, and internal operations. The company has stated that it is transitioning towards machine-led systems supervised by human oversight to support product development and operational processes. PayTM has developed in-house AI platforms, including PayTM ARMS, a merchant lifecycle insights platform used for merchant onboarding, segmentation, and pricing optimisation, and PayTM Pi, a system designed for fraud detection and risk management. According to the company, these platforms automate several merchant-related processes and support fraud prevention efforts. PayTM has also highlighted its integrated payments infrastructure, which combines hardware, software, and services with business-specific solutions for merchants. In February-2025, PayTM partnered with Perplexity to integrate AI-powered search capabilities into its platform.
+
+
+== Paytm Foundation ==
+During the COVID-19 pandemic in India, PayTM facilitated contributions to the PM CARES Fund through its platform and reported that donations made via the app exceeded ₹100 crore. In April-2021, the company announced that it had placed an order for 21,000 oxygen concentrators. PayTM also stated that it raised ₹5 crore in public contributions and matched the amount, creating a ₹10 crore fund for the procurement of oxygen concentrators. Through the PayTM Foundation, the company has supported various educational and community initiatives. The foundation funded scholarships for 24 students pursuing higher education at Scaler School of Technology in Bengaluru. During National Nutrition Week in 2024, it donated educational kits to Anganwadi centres in the Gautam Buddha Nagar district. The foundation has also contributed to educational infrastructure projects in rural India and donated ambulances in the Kuppam district, as well as water coolers at public locations.
+
+
+== Controversy ==
+
+In May-2018, the Indian investigative news agency Cobrapost released a video of an undercover reporter meeting with PayTM's vice president, Ajay Shekhar Sharma who is the brother of Vijay Shekhar Sharma. During the meeting, he reportedly said the company had provided the Government of India with the personal data of PayTM users in the Indian state of Jammu and Kashmir, violating user's privacy and policies. Later, BuzzFeed reported that the video mentions Sharma to have close ties with Rashtriya Swayamsevak Sangh (RSS). Meanwhile, in response, the company tweeted that, it had never shared user's data with third parties, denied the contents in the video, and stated that it had never received requests from law enforcement on Twitter. PayTM also stated that any person claiming otherwise "is not aware of the policy and is not authorised to speak on behalf of the company".
+
+
+== References ==
+
+
+== External links ==
+Official website

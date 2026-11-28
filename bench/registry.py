@@ -975,7 +975,8 @@ def bench_graph_real() -> Dict[str, float]:
         found = paths.find_path_for(pairs, start, goal, max_hops=3) \
             if hasattr(paths, "find_path_for") else None
         hops = float(found["hops"]) if found else 0.0
-    return {"articles": 15.0, "chars": float(len(text)),
+    articles = float(len(os.listdir(directory)))
+    return {"articles": articles, "chars": float(len(text)),
             "entities": float(len(entities)), "edges": float(len(relations)),
             "nodes": float(summary["nodes"]),
             "communities": float(summary["communities"]),
