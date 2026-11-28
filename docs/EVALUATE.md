@@ -67,6 +67,32 @@ Part 5 adds
 BEIR and CRAG **subsets** — datasets, not leaderboards, which is a change from
 `MASTER-PLAN.md` and is explained in `PLAN-V3.md` Part B.
 
+## Cost
+
+Every question also records what it cost: context tokens, answer tokens, wall
+clock, and money at a configured price per 1,000 tokens.
+
+```
+cost
+------------------------------------------------------------------------------
+answered                 40  questions with an answer, of 40
+context tokens          986  retrieved text, estimated at 4 chars/token
+answer tokens           232  the answer itself
+seconds/answered       0.03  wall clock for a question that got an answer
+cost/question         local  no model was called, so there is no token price
+```
+
+**The price defaults to zero and prints `local`**, because the default answerer is
+extractive and calls no model — a price for a model nobody called would be
+precise, plausible, and about something that did not happen.
+
+**Cost is per question and per answered question.** They differ, and the gap is
+the finding: a system that refuses half its questions is cheap per question and
+expensive per answer.
+
+Tokens are **estimated** at 4 characters each, and labelled an estimate — a real
+tokeniser would make two runs incomparable when different tokenisers are installed.
+
 ## What the first run says
 
 `recall@1` is 25% and `recall@5` is 75%. Three of twelve questions miss the top

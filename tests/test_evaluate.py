@@ -326,3 +326,68 @@ def test_a_bare_list_is_accepted(tmp_path):
     path = _write_set(tmp_path, [{"question": "q", "document": "d",
                                   "keywords": ["a"]}])
     assert len(evaluate.load_set(path)) == 1
+
+
+# ---------------------------------------------------------------------------
+# Part 4: cost
+# ---------------------------------------------------------------------------
+
+
+def test_tokens_are_estimated_at_four_characters_each():
+    assert evaluate.estimate_tokens("") == 0
+    assert evaluate.estimate_tokens("abcd") == 1
+    assert evaluate.estimate_tokens("abcde") == 2      # ceil, not floor
+    assert evaluate.estimate_tokens("x" * 400) == 100
+
+
+def test_cost_of_is_the_arithmetic_on_paper():
+    # 4,000 context chars = 1,000 tokens at 0.5 per 1k = 0.5
+    #   400 answer chars  =   100 tokens at 2.0 per 1k = 0.2
+    outcome = Outcome(item=_item(), context_chars=4000, answer_chars=400,
+                      seconds=1.5, model_calls=1)
+    cost = evaluate.cost_of(outcome, price_in=0.5, price_out=2.0)
+    assert cost.context_tokens == 1000
+    assert cost.answer_tokens == 100
+    assert cost.usd == pytest.approx(0.5 + 0.2)
+    assert cost.seconds == 1.5 and cost.model_calls == 1
+
+
+def test_a_local_answerer_costs_no_tokens():
+    """The default answerer is extractive and local; a made-up price for a model
+    nobody called would be the worst kind of number."""
+    outcome = Outcome(item=_item(), context_chars=800, answer_chars=80,
+                      seconds=0.2, model_calls=0)
+    assert evaluate.cost_of(outcome).usd == 0.0
+
+
+def test_cost_per_question_and_per_answered_differ_when_some_are_refused():
+    answered = Outcome(item=_item(), ranked=["docs/ann.md"], answered=True,
+                       context_chars=400, answer_chars=40, seconds=1.0)
+    refused = Outcome(item=_item(), ranked=[], answered=False,
+                      context_chars=0, answer_chars=0, seconds=1.0)
+    summary = evaluate.summarise([answered, refused])
+    assert summary["answered"] == 1
+    # both questions took a second, so per question is 1.0
+    assert summary["seconds"] == pytest.approx(1.0)
+    # but only one produced an answer
+    assert summary["seconds_per_answered"] == pytest.approx(1.0)
+    # context tokens are a mean over *both* questions: 400 chars = 100 tokens,
+    # and the refused question retrieved nothing, so the mean is 50
+    assert summary["context_tokens"] == pytest.approx(50.0)
+
+
+def test_the_cost_block_says_local_when_no_price_is_set():
+    outcome = Outcome(item=_item(), ranked=["docs/ann.md"], context_chars=400)
+    text = evaluate.render(evaluate.summarise([outcome]))
+    assert "cost" in text
+    assert "local" in text
+    assert "no model was called" in text
+
+
+def test_the_cost_block_shows_a_price_when_one_is_configured():
+    outcome = Outcome(item=_item(), ranked=["docs/ann.md"], context_chars=4000,
+                      answer_chars=400)
+    text = evaluate.render(evaluate.summarise([outcome], price_in=0.5,
+                                              price_out=2.0))
+    assert "cost/question" in text
+    assert "local" not in text

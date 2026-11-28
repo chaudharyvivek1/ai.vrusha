@@ -8,6 +8,30 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 39 — Part 4: cost accounting · PR #35
+
+Phase 0 is complete: quality is measured on 40 questions, and cost is measured on
+the same run.
+
+- `vrusha/evaluate.py` — `context_tokens`, `answer_tokens`, `seconds`, `usd` per
+  question, and a cost block in the table
+- `cost per question` **and** `cost per answered question` — a system that refuses
+  half its questions is cheap per question and expensive per answer
+- prices default to **zero** and the table prints `local`, because the default
+  answerer is extractive and calls no model
+- `tests/test_evaluate.py` — 6 more tests against hand arithmetic
+
+**Measured:** 986 context tokens and 232 answer tokens per question, 0.03 s, no
+token cost. With `--answers`, citation accuracy is **57%** — the answer cites the
+document that holds it slightly more often than retrieval finds it at rank 1.
+
+**One error, in my own test:** `context_tokens` is a mean over all questions, so
+100 tokens beside a refused question that retrieved nothing averages to 50. Third
+time in this project that the test expectation, not the code, was wrong — the
+pattern is writing the expectation from the intent instead of the arithmetic.
+
+---
+
 ## Wave 38 — Parts 2 and 3: the 40-question set, and the work log · PR #34
 
 - `vrusha/eval_sets/docs-40.json` — 40 labelled questions over this repository's

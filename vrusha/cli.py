@@ -1085,7 +1085,10 @@ def cmd_evaluate(args, cfg, rules, registry) -> int:
         return 1
     finally:
         store.close()
-    summary = evaluate.summarise(outcomes)
+    block = (cfg.get("evaluate", {}) or {})
+    summary = evaluate.summarise(
+        outcomes, price_in=float(block.get("price_per_1k_in", 0.0) or 0.0),
+        price_out=float(block.get("price_per_1k_out", 0.0) or 0.0))
     if args.json:
         print(json.dumps({"summary": summary,
                           "questions": [{"question": o.item.question,
