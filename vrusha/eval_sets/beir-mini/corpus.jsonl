@@ -1,0 +1,5 @@
+{"_id": "d1", "title": "Licence gates", "text": "A page with no licence recorded is refused by the gate. The gate is a rule, not a preference."}
+{"_id": "d2", "title": "Address collisions", "text": "Two chunks can receive the same address. An ordinal breaks the tie so neither is lost."}
+{"_id": "d3", "title": "Vector routing", "text": "The index routes a query to the nearest cells and rescores the candidates from the float32 blob."}
+{"_id": "d4", "title": "Compaction", "text": "A summary that drops a decision produces confident wrong answers, so every summary carries its seq range."}
+{"_id": "d5", "title": "Claims", "text": "A claim is one row per task with a lease, so a dead agent releases its work when the lease expires."}
