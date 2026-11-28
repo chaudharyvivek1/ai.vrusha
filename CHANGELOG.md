@@ -8,6 +8,31 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 25 — model2vec is the default embedder · PR #21
+
+On the evidence from waves 21 and 24: `bm25 + hash` scored **8% recall@1**, worse
+than BM25 alone, and hash is a feature hash rather than a meaning.
+
+- `config` — `store.embed_backend: model2vec` (falls back to `hash` with a
+  printed reason when the package is absent)
+- `store/db.py` — `set_embedder()` / `embedder_name()`: the store records which
+  embedder produced its vectors and **refuses a second one**, because `hash` and
+  `potion-base-8M` are both 256 dimensions and the width check cannot see the
+  difference
+- `ingest` — the guard runs before a single row is written
+- `query` — a mismatch between the recorded embedder and the one in use is a
+  warning in the retrieval notes, not a silent wrong answer
+
+**The hazard this closes:** switching embedders at the same width mixes two
+vector spaces in one store, and every cosine between them is noise that looks
+like a score.
+
+**One test was rewritten, not deleted:** `test_the_default_backend_is_still_hash`
+asserted the old default. It now asserts the fallback, which is the property that
+had to survive the change.
+
+---
+
 ## Wave 24 — the index on real embeddings · PR #20
 
 Every recall table so far came from synthetic vectors. This measures the index on
