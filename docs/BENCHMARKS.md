@@ -271,6 +271,69 @@ is worth more than any further work on the index.
 | more than one worker process | one per core, not more: throughput falls with threads on this box |
 | slow first query after start | the index loads off disk; it is a startup cost, warm it |
 
+## Retrieval quality: does the vector mean anything?
+
+Every table above was measured with the `hash` embedder, which is a feature hash
+and not a meaning. That makes those numbers a statement about the **index** —
+does routing find the vector the scan would find — and not about **retrieval**.
+
+`bench/embedders.py` measures the second thing on a small labelled set: the
+repository's own documentation, one topic per file, and 12 queries phrased the
+way a person would phrase them, deliberately **avoiding the words the target
+document uses** — a query that repeats the title only tests the keyword index.
+
+### One vector per document
+
+| system | recall@1 | recall@3 | MRR |
+|---|---|---|---|
+| bm25 (FTS5, OR + bm25 ranking) | 17% | 42% | 0.292 |
+| hash (the old default) | 17% | 42% | 0.322 |
+| **model2vec (potion-base-8M)** | **33%** | **50%** | **0.472** |
+
+At document granularity the semantic embedder **doubles recall@1**. That is the
+case embeddings exist for: a 12,000-character file mean-pooled into 256 numbers
+still lands nearer the right query than a keyword overlap does.
+
+### Chunked at 500 characters — what the store actually holds
+
+| system | recall@1 | recall@3 | MRR |
+|---|---|---|---|
+| bm25 | 25% | 58% | 0.433 |
+| hash | 17% | 33% | 0.274 |
+| model2vec | 17% | 58% | 0.447 |
+| bm25 + hash (fused by RRF) | 8% | 67% | 0.359 |
+| **bm25 + model2vec (fused by RRF)** | **25%** | **75%** | **0.524** |
+
+Three findings, in order of how much they matter:
+
+1. **At chunk level, keywords win on their own.** BM25 gets 25% recall@1 where
+   the vector gets 17%. A 500-character chunk contains the words; dilution is
+   what embeddings fix, and a chunk has little to dilute.
+2. **Fusion is where the semantic signal pays.** BM25 + model2vec reaches **75%
+   recall@3 against BM25's 58%**, and MRR 0.524 against 0.433. That is the
+   configuration `retrieve()` actually runs.
+3. **The old default was not neutral — it was harmful.** BM25 + hash scores
+   **8% recall@1**, worse than BM25 alone (25%). A lexical hash adds a second
+   copy of the same evidence, and RRF then double-counts it. Replacing `hash`
+   with a real embedder is not a refinement; the previous default was actively
+   costing recall.
+
+### The honest caveats
+
+- **12 queries, 15 documents.** Small enough to check by hand, which is why the
+  script prints a per-query audit: two of the labels are arguable (both
+  "what am I allowed to do" queries point at `RULES.md`, and "run on a laptop"
+  could reasonably be `BENCHMARKS.md`), so the absolute numbers are soft. The
+  *ordering* between systems is consistent across both granularities.
+- **These are documentation pages**, not a corpus of questions people asked.
+- **model2vec is uncontextualised**: it averages a static table, so word order
+  and negation are invisible to it. It won here anyway.
+
+```bash
+pip install model2vec
+python bench/embedders.py      # the three tables above, from this machine
+```
+
 ## Reproducing this
 
 ```bash

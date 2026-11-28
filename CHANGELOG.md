@@ -8,6 +8,34 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 21 — does the vector mean anything? · PR #17
+
+Re-ran retrieval quality with the real embedder, on labelled queries, and the
+answer changes the conclusion of wave 20.
+
+- `bench/embedders.py` — 15 documents from `docs/`, 12 hand-written queries that
+  avoid the target's own words; bm25 vs hash vs model2vec, at document and at
+  chunk granularity, plus RRF fusion as `retrieve()` runs it
+- `docs/BENCHMARKS.md` — a new section with all three tables and the caveats
+
+**The numbers.** One vector per document: bm25 17% recall@1, hash 17%,
+**model2vec 33%**. Chunked at 500 characters: bm25 **25%**, hash 17%,
+model2vec 17%, and fused — bm25+hash 8%, **bm25+model2vec 25% recall@1 / 75%
+recall@3 / MRR 0.524**.
+
+**Three findings.** At chunk level keywords win alone, because a 500-character
+chunk still contains the words. Fusion is where semantics pays: +17 points of
+recall@3 over BM25 alone. And **the old default was actively harmful** — bm25+hash
+scores 8% recall@1, worse than BM25 alone, because a lexical hash is a second
+copy of the same evidence and RRF double-counts it.
+
+**Bugs in the harness, before the numbers could be trusted:** FTS5 reads a bare
+multi-word query as AND, so the first BM25 baseline scored 0% and was a broken
+comparison rather than a weak one; and a per-query record keyed by a list raised
+`TypeError`.
+
+---
+
 ## Wave 20 — survey, and model2vec adopted · PR #16
 
 The AI repo survey, and the one candidate that fixes the biggest gap in the store.
