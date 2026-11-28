@@ -8,6 +8,33 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 24 — the index on real embeddings · PR #20
+
+Every recall table so far came from synthetic vectors. This measures the index on
+**2,373 chunks of this repository's own text**, embedded with model2vec.
+
+- `bench/real_corpus.py` — walks the repo, chunks at 500 characters, embeds,
+  builds the index, measures recall@10 against the full scan, and reports the
+  geometry that explains the result
+- `docs/BENCHMARKS.md` — a new section
+
+**The geometry is the finding.** Mean cosine between two random chunks **0.462**,
+mean nearest-neighbour **0.816**: real embeddings are clustered, which is the
+condition routing needs. At the default `nprobe` (2 of 19 cells) that corpus gets
+**79% recall@10 in 0.21 ms**; eight cells reach **98% in 0.41 ms**; sixteen reach
+100%.
+
+**What that says about the old tables:** the synthetic isotropic row (12% recall
+at low `nprobe`) is a stress test, not a description of any real corpus. A corpus
+of text embedded by a real model is clustered; the pathological case has to be
+built on purpose.
+
+**Two harness bugs:** the shim lacked `embed_dim()`; and the "rows scored" column
+reported the top-10 *returned* rather than the rows actually scanned, which made
+every row read "10".
+
+---
+
 ## Wave 23 — sqlite-vec as a third backend · PR #19
 
 - `vrusha/store/vec0.py` — `Vec0Backend`: a `vec0` virtual table in
