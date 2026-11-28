@@ -8,6 +8,30 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 47 — Part 22: entities from prose · PR #43
+
+Phase 4 begins. The store could read tables and not sentences.
+
+- `vrusha/store/prose.py` — rule-based extraction: organisations by suffix, people
+  by honorific, places by preposition, spans and confidence returned
+- `bench/registry.py` — `entities`; `docs/benchmarks/12-entities.md`
+- `tests/test_prose.py` — 13 tests, half of them refusals
+
+**Measured:** 1,394 entities across the documentation corpus at **63,855
+characters per second**.
+
+**Three bugs, all found by running it on one real sentence:** a run crossed a
+sentence break (`Pune. Dr Meera Rao` became one entity, because the period sat
+inside the previous token); `Reserve Bank of India` split at `of`; and `The
+Reserve Bank of India` kept its article.
+
+**What it will not do is written into the module docstring** — an organisation with
+no suffix and no capital, `Jordan` the person against `Jordan` the country,
+coreference. Those are model jobs, and a caller who knows the limits can trust
+what they get.
+
+---
+
 ## Wave 46 — Part 21: versioned snapshots, and Phase 3 closed · PR #42
 
 - `vrusha/store/snapshot.py` — a **generation** in a `CURRENT` file bumped after
