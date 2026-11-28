@@ -364,6 +364,64 @@ def bench_serve() -> Dict[str, float]:
     return {"request_ms": timings["p50_ms"], "max_ms": timings["max_ms"]}
 
 
+def bench_index_delta() -> Dict[str, float]:
+    """What an append costs, against what a rebuild costs.
+
+    The whole point of delta segments: adding vectors must be O(new) and not
+    O(all). This measures both on the same store, and reports the ratio.
+    """
+    import numpy as np
+
+    from vrusha.config import DEFAULTS, ensure_dirs, resolve
+    from vrusha.store import ann as ann_mod
+    from vrusha.store import delta as delta_mod
+    from vrusha.store.db import Store
+
+    cfg = {key: (dict(value) if isinstance(value, dict) else value)
+           for key, value in DEFAULTS.items()}
+    cfg["paths"] = dict(DEFAULTS["paths"])
+    cfg["paths"]["root"] = tempfile.mkdtemp()
+    ensure_dirs(cfg)
+    store = Store(resolve(cfg, "db"))
+    doc = store.add_document(url="https://a.test/1", title="t", text="x " * 60)
+    rng = np.random.default_rng(3)
+    dim = 64
+    for index in range(4000):
+        chunk = store.add_chunk(doc, f"chunk {index} " + "text " * 6, kind="prose")
+        vector = rng.normal(size=dim).astype(np.float32)
+        store.set_vector(chunk, vector / np.linalg.norm(vector))
+    store.commit()
+
+    index_dir = resolve(cfg, "index")
+    os.makedirs(index_dir, exist_ok=True)
+    started = time.perf_counter()
+    built = ann_mod.AnnIndex.build(store)
+    built.save(index_dir)
+    rebuild_ms = (time.perf_counter() - started) * 1000.0
+
+    new_ids = []
+    for index in range(200):
+        chunk = store.add_chunk(doc, f"new {index} " + "text " * 6, kind="prose")
+        vector = rng.normal(size=dim).astype(np.float32)
+        store.set_vector(chunk, vector / np.linalg.norm(vector))
+        new_ids.append(chunk)
+    store.commit()
+
+    started = time.perf_counter()
+    delta_mod.append(store, index_dir, new_ids)
+    append_ms = (time.perf_counter() - started) * 1000.0
+
+    query = rng.normal(size=dim).astype(np.float32)
+    query /= np.linalg.norm(query)
+    search_ms = _timeit(lambda: delta_mod.search(index_dir, query, 10,
+                                                 base=built, store=store),
+                        repeats=10)["p50_ms"]
+    store.close()
+    return {"rebuild_ms": rebuild_ms, "append_ms": append_ms,
+            "ratio": rebuild_ms / max(1e-9, append_ms),
+            "search_ms": search_ms, "new_vectors": 200.0}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -374,6 +432,7 @@ BENCHMARKS: List[tuple] = [
     ("ingest", bench_ingest, "documents to chunks and vectors"),
     ("extract", bench_extract, "fixtures to typed tables"),
     ("serve", bench_serve, "one request through the JSON API"),
+    ("index_delta", bench_index_delta, "append vs full rebuild"),
 ]
 
 
