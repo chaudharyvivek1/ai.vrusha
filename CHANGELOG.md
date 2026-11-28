@@ -8,6 +8,26 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 23 — sqlite-vec as a third backend · PR #19
+
+- `vrusha/store/vec0.py` — `Vec0Backend`: a `vec0` virtual table in
+  `<store>.vec0.db`, built from the store's vectors, cosine via
+  `distance_metric=cosine`, connection cached (the extension load is ~27 ms)
+- `build_backends()` and the router offer it once it exists; `vrusha index build
+  --engine sqlite-vec`; `vrusha backends` reports it
+- `tests/test_vec0.py` — 6 tests, the important one being **identical top-three
+  and scores against the exact scan**
+
+**Measured:** 213 chunks at 256 dims, 0.98 ms per warm query, results equal to
+the scan to six decimal places.
+
+**A bug:** the router call used `self.usable(...)` for a helper that is a local
+function inside `plan()`, so the router raised and every query fell back to the
+store. The fallback is what made that a missing optimisation rather than an
+outage — which is the point of having one.
+
+---
+
 ## Wave 22 — the address ranking, 142× faster · PR #18
 
 The largest remaining cost in the retriever, fixed.

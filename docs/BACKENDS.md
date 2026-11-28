@@ -110,6 +110,38 @@ only place the latency memory and the cooldown state survive between requests. A
 one-shot `vrusha query` starts cold and therefore always begins at the default
 backend — correct, but it never learns.
 
+## A third engine: sqlite-vec
+
+```bash
+pip install sqlite-vec
+vrusha index build --engine sqlite-vec
+vrusha backends                       # sqlite-vec: ready
+vrusha query "..." --explain          # backend: sqlite-vec
+```
+
+`sqlite-vec` is a single C file that adds a `vec0` virtual table to SQLite: float,
+int8 and binary vectors, KNN through a `MATCH` constraint, no dependencies,
+MIT/Apache-2.0. It belongs here because **this store is already SQLite** — the
+third vector engine needs no new format, no server, and no index files to keep in
+step. It lives in `<store>.vec0.db`, a cache like the ANN index: delete it and
+nothing is lost.
+
+| | native IVF (`ann.py`) | sqlite-vec |
+|---|---|---|
+| search | approximate, `nprobe` cells | brute force in C |
+| format | six files beside the store | a `vec0` table in one file |
+| int8 / binary | int8 | int8 and binary |
+| scale | better above ~1M | better below it, on constant factor |
+| verified against the scan | yes (`tests/test_ann.py`) | yes (`tests/test_vec0.py`) |
+
+Measured on 213 chunks at 256 dims: **0.98 ms** per warm query, and the top three
+identical to the exact scan to six decimal places. The first query after opening
+costs ~27 ms — the extension load — so the connection is kept.
+
+**What it does not do:** it is not an ANN index, so it does not change the
+asymptotics. It is a faster constant factor below the size where the IVF's
+routing starts to pay, and a third option for the router to fail over to.
+
 ## What is faster, honestly
 
 Merging two engines does not make one query faster than the best engine. What it
