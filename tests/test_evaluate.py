@@ -207,3 +207,122 @@ def test_the_built_in_set_is_twelve_labelled_questions():
     assert len(evaluate.DOCS_SET) == 12
     assert all(item.question and item.document for item in evaluate.DOCS_SET)
     assert all(item.keywords for item in evaluate.DOCS_SET)
+
+
+# ---------------------------------------------------------------------------
+# the empty store, and the PDF fix from the recheck
+# ---------------------------------------------------------------------------
+
+
+def test_an_empty_store_is_refused_not_scored(tmp_path):
+    """0% recall on an empty store reads as "retrieval is broken"."""
+    import os as _os
+    from vrusha.config import DEFAULTS, ensure_dirs, resolve
+    from vrusha.store.db import Store
+    from vrusha.store.embed import HashEmbedder
+
+    cfg = {key: (dict(value) if isinstance(value, dict) else value)
+           for key, value in DEFAULTS.items()}
+    cfg["paths"] = dict(DEFAULTS["paths"])
+    cfg["paths"]["root"] = str(tmp_path)
+    ensure_dirs(cfg)
+    store = Store(resolve(cfg, "db"))
+    with pytest.raises(RuntimeError) as error:
+        evaluate.run(store, HashEmbedder(32), cfg)
+    assert "no chunks" in str(error.value)
+    assert "ingest" in str(error.value)
+    store.close()
+
+
+# ---------------------------------------------------------------------------
+# the set on disk, and the loader that refuses a bad one
+# ---------------------------------------------------------------------------
+
+
+def test_the_docs_set_loads_forty_labelled_questions():
+    items = evaluate.load_set("docs")
+    assert len(items) == 40
+    assert all(item.question and item.document and item.keywords for item in items)
+    assert len({item.question for item in items}) == 40, "no duplicates"
+
+
+def test_every_keyword_appears_in_its_own_document():
+    """The check that keeps the set honest.
+
+    A keyword that does not appear in the target document makes `passage@k`
+    unachievable, and the metric silently becomes a measure of the labels.
+    """
+    import pathlib
+    root = pathlib.Path(ROOT) / "docs"
+    for item in evaluate.load_set("docs"):
+        path = root / item.document
+        assert path.exists(), f"{item.document} does not exist"
+        text = path.read_text(encoding="utf-8").lower()
+        missing = [word for word in item.keywords if word.lower() not in text]
+        assert not missing, f"{item.document} has no {missing}"
+
+
+def _write_set(tmp_path, payload, name="set.json"):
+    import json
+    path = tmp_path / name
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return str(path)
+
+
+def test_a_question_with_no_document_is_refused(tmp_path):
+    path = _write_set(tmp_path, {"items": [{"question": "q", "keywords": ["a"]}]})
+    with pytest.raises(evaluate.MalformedSet) as error:
+        evaluate.load_set(path)
+    assert "no document" in str(error.value)
+
+
+def test_a_question_with_no_keywords_is_refused(tmp_path):
+    path = _write_set(tmp_path, {"items": [{"question": "q", "document": "d"}]})
+    with pytest.raises(evaluate.MalformedSet) as error:
+        evaluate.load_set(path)
+    assert "no keywords" in str(error.value)
+
+
+def test_a_blank_keyword_is_refused(tmp_path):
+    path = _write_set(tmp_path, {"items": [
+        {"question": "q", "document": "d", "keywords": ["a", "  "]}]})
+    with pytest.raises(evaluate.MalformedSet) as error:
+        evaluate.load_set(path)
+    assert "blank keyword" in str(error.value)
+
+
+def test_a_duplicate_question_is_refused(tmp_path):
+    path = _write_set(tmp_path, {"items": [
+        {"question": "q", "document": "d", "keywords": ["a"]},
+        {"question": "q", "document": "d", "keywords": ["a"]}]})
+    with pytest.raises(evaluate.MalformedSet) as error:
+        evaluate.load_set(path)
+    assert "repeats" in str(error.value)
+
+
+def test_a_missing_set_names_the_ones_that_exist(tmp_path):
+    with pytest.raises(evaluate.MalformedSet) as error:
+        evaluate.load_set(str(tmp_path / "nope.json"))
+    assert "docs" in str(error.value)
+
+
+def test_invalid_json_is_refused(tmp_path):
+    path = tmp_path / "bad.json"
+    path.write_text("{not json", encoding="utf-8")
+    with pytest.raises(evaluate.MalformedSet) as error:
+        evaluate.load_set(str(path))
+    assert "not valid JSON" in str(error.value)
+
+
+def test_an_empty_set_is_refused(tmp_path):
+    path = _write_set(tmp_path, {"items": []})
+    with pytest.raises(evaluate.MalformedSet) as error:
+        evaluate.load_set(path)
+    assert "non-empty" in str(error.value)
+
+
+def test_a_bare_list_is_accepted(tmp_path):
+    """A set written as a plain list is still a set."""
+    path = _write_set(tmp_path, [{"question": "q", "document": "d",
+                                  "keywords": ["a"]}])
+    assert len(evaluate.load_set(path)) == 1

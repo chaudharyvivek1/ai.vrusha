@@ -1070,11 +1070,19 @@ def cmd_evaluate(args, cfg, rules, registry) -> int:
     """Measure retrieval and answering, on the built-in labelled set."""
     from . import evaluate
 
+    try:
+        items = evaluate.load_set(args.set or "docs")
+    except evaluate.MalformedSet as exc:
+        print(f"evaluate: {exc}")
+        return 1
     store = _open_store(cfg)
     try:
-        outcomes = evaluate.run(store, _embedder(cfg), cfg,
+        outcomes = evaluate.run(store, _embedder(cfg), cfg, items,
                                 top_k=args.top_k,
                                 with_answers=args.answers)
+    except RuntimeError as exc:
+        print(f"evaluate: {exc}")
+        return 1
     finally:
         store.close()
     summary = evaluate.summarise(outcomes)
@@ -1089,7 +1097,8 @@ def cmd_evaluate(args, cfg, rules, registry) -> int:
                          indent=2, ensure_ascii=False))
         return 0
     print()
-    print(evaluate.render(summary, "vrusha, the built-in set (12 questions)"))
+    print(evaluate.render(summary, f"vrusha, set {args.set or 'docs'} "
+                                   f"({summary.get('questions', 0)} questions)"))
     if args.verbose:
         print()
         for outcome in outcomes:
@@ -1492,6 +1501,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("evaluate", parents=[common],
                        help="measure retrieval and answering on a labelled set")
+    p.add_argument("--set", default="docs",
+                   help="a named set (docs) or a path to a set JSON file")
     p.add_argument("--top-k", type=int, default=5)
     p.add_argument("--answers", action="store_true",
                    help="also compose answers, to measure citation accuracy")

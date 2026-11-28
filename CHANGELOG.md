@@ -8,6 +8,33 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 38 — Parts 2 and 3: the 40-question set, and the work log · PR #34
+
+- `vrusha/eval_sets/docs-40.json` — 40 labelled questions over this repository's
+  own documentation, each with its document and the words a correct passage needs
+- `vrusha/evaluate.py` — `load_set()` refuses a malformed set with the item
+  number and the reason (no document, no keywords, blank keyword, duplicate,
+  bad JSON, empty, unknown name)
+- `vrusha evaluate --set docs`; `docs/work/` — the checklist and one file per part
+- `pyproject.toml` — `eval_sets/*.json` added to package data
+
+**The numbers, on 40 questions:** recall@1 **35%**, recall@5 **70%**, MRR
+**0.468**, nDCG@10 **57%**, passage@5 **48%**. The bigger set is *harsher* on
+recall@5 than the 12-question one (70% vs 75%) — the first twelve were flattering,
+which is the argument for Part 2 existing.
+
+**Bugs found before shipping:** two keywords did not appear in their own
+documents (`ADDRESS.md` says "collide", not "collision"), which would have made
+`passage@k` unachievable; and the new `eval_sets/` directory was missing from
+`package-data`, so the set would not have shipped in a wheel — found by building
+one and looking inside.
+
+**Found while rechecking the previous work:** `pdf.py` tracked `in_text` and never
+read it, so `Td`/`Tm` moved the text cursor even outside a text block; and
+`evaluate` printed a table of zeros for an empty store instead of refusing.
+
+---
+
 ## Wave 37 — Part 1: the metrics · PR #33
 
 The first of the forty parts in `docs/PLAN-V3.md`, and the one everything else is
