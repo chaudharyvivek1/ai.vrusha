@@ -158,3 +158,123 @@ def test_a_corrupt_segment_is_skipped_not_fatal(tmp_path):
     hits = delta.search(index_dir, query, 3, base=built, store=store)
     assert len(hits) == 3, "the base still answers"
     store.close()
+
+
+# ---------------------------------------------------------------------------
+# Part 19: upsert and delete
+# ---------------------------------------------------------------------------
+
+
+def _query_for(store, chunk_id):
+    vector = np.asarray(store.get_vectors([chunk_id])[1][0], dtype=np.float32)
+    return vector / np.linalg.norm(vector)
+
+
+def test_an_upsert_replaces_the_old_vector(tmp_path):
+    """Without a tombstone the base keeps serving the old vector and the chunk
+    answers twice — the failure this part exists to prevent."""
+    store, cfg, index_dir, built, doc = _setup(tmp_path)
+    target = 7
+    old_query = _query_for(store, target)
+
+    rng = np.random.default_rng(21)
+    fresh = rng.normal(size=DIM).astype(np.float32)
+    store.set_vector(target, fresh / np.linalg.norm(fresh))
+    store.commit()
+    result = delta.upsert(store, index_dir, [target])
+    assert result["superseded"] == 1
+
+    # the old direction no longer finds it, the new one does
+    old_hits = [c for c, _s in delta.search(index_dir, old_query, 5,
+                                            base=built, store=store)]
+    new_hits = [c for c, _s in delta.search(index_dir, _query_for(store, target),
+                                            5, base=built, store=store)]
+    assert target not in old_hits, "the superseded vector still answers"
+    assert new_hits[0] == target
+    store.close()
+
+
+def test_a_deleted_chunk_stops_appearing(tmp_path):
+    store, cfg, index_dir, built, doc = _setup(tmp_path)
+    target = 11
+    query = _query_for(store, target)
+    assert [c for c, _s in delta.search(index_dir, query, 3, base=built,
+                                        store=store)][0] == target
+
+    delta.delete(store, index_dir, [target])
+    hits = [c for c, _s in delta.search(index_dir, query, 5, base=built,
+                                        store=store)]
+    assert target not in hits
+    store.close()
+
+
+def test_a_delete_writes_no_vectors(tmp_path):
+    store, cfg, index_dir, built, doc = _setup(tmp_path)
+    result = delta.delete(store, index_dir, [1, 2, 3])
+    assert result["rows"] == 0
+    assert result["superseded"] == 3
+    assert delta.stats(index_dir)["segment_rows"] == 0
+    store.close()
+
+
+def test_a_chunk_can_be_deleted_and_added_again(tmp_path):
+    store, cfg, index_dir, built, doc = _setup(tmp_path)
+    target = 5
+    delta.delete(store, index_dir, [target])
+    delta.upsert(store, index_dir, [target])
+    hits = [c for c, _s in delta.search(index_dir, _query_for(store, target), 3,
+                                        base=built, store=store)]
+    assert hits[0] == target, "the newest mention wins"
+    store.close()
+
+
+def test_the_newest_segment_wins(tmp_path):
+    store, cfg, index_dir, built, doc = _setup(tmp_path)
+    target = 3
+    delta.delete(store, index_dir, [target])
+    delta.upsert(store, index_dir, [target])          # newer
+    hits = [c for c, _s in delta.search(index_dir, _query_for(store, target), 3,
+                                        base=built, store=store)]
+    assert target in hits
+    store.close()
+
+
+def test_a_deleted_chunk_is_gone_after_compaction(tmp_path):
+    store, cfg, index_dir, built, doc = _setup(tmp_path)
+    target = 9
+    store.deactivate_chunk(target) if hasattr(store, "deactivate_chunk") else None
+    store.conn.execute("UPDATE chunks SET active = 0 WHERE chunk_id = ?", (target,))
+    store.conn.commit()
+    delta.delete(store, index_dir, [target])
+    delta.compact(store, index_dir, cfg)
+
+    rebuilt = ann_mod.AnnIndex.load(index_dir)
+    assert rebuilt is not None
+    hits = [c for c, _s in delta.search(index_dir, _query_for(store, 1), 50,
+                                        base=rebuilt, store=store)]
+    assert target not in hits, "the base was rebuilt from the store, so the " \
+                               "deleted chunk is not in it"
+    store.close()
+
+
+def test_the_merged_search_still_matches_the_store_after_edits(tmp_path):
+    store, cfg, index_dir, built, doc = _setup(tmp_path)
+    rng = np.random.default_rng(31)
+    for chunk_id in (2, 4, 6):
+        vector = rng.normal(size=DIM).astype(np.float32)
+        store.set_vector(chunk_id, vector / np.linalg.norm(vector))
+    store.commit()
+    delta.upsert(store, index_dir, [2, 4, 6])
+    delta.delete(store, index_dir, [8])
+
+    for _ in range(3):
+        query = rng.normal(size=DIM).astype(np.float32)
+        query /= np.linalg.norm(query)
+        hits = {c for c, _s in delta.search(index_dir, query, 5, base=built,
+                                            store=store)}
+        ids, matrix = store.get_vectors()
+        scores = np.asarray(matrix) @ query
+        truth = [int(ids[i]) for i in np.argsort(-scores)]
+        assert 8 not in hits
+        assert hits <= set(truth)
+    store.close()

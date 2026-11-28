@@ -54,11 +54,21 @@ def segment_paths(index_dir: str) -> List[str]:
 
 @dataclass
 class Segment:
-    """One append-only file of vectors, brute-forced at query time."""
+    """One append-only file of vectors, brute-forced at query time.
+
+    `supersedes` is the tombstone list: chunk ids whose *older* copies — in the
+    base or in an earlier segment — must be ignored. An id can be superseded with
+    a replacement vector (upsert) or with nothing at all (delete).
+    """
 
     path: str
     ids: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
     vectors: np.ndarray = field(default_factory=lambda: np.zeros((0, 0), np.float32))
+    supersedes: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
+
+    @property
+    def created(self) -> str:
+        return os.path.basename(self.path)
 
     @property
     def rows(self) -> int:
@@ -74,7 +84,8 @@ class Segment:
         return [(int(self.ids[index]), float(scores[index])) for index in order]
 
 
-def write_segment(index_dir: str, ids: np.ndarray, vectors: np.ndarray) -> str:
+def write_segment(index_dir: str, ids: np.ndarray, vectors: np.ndarray,
+                  supersedes: Optional[Sequence[int]] = None) -> str:
     """Write one segment and return its path. Nothing else is touched.
 
     The segment is written to a temporary **directory** and renamed into place, so
@@ -96,8 +107,11 @@ def write_segment(index_dir: str, ids: np.ndarray, vectors: np.ndarray) -> str:
         np.save(handle, matrix)
     with open(os.path.join(staging, "ids.npy"), "wb") as handle:
         np.save(handle, np.asarray(ids, dtype=np.int64))
+    with open(os.path.join(staging, "supersedes.npy"), "wb") as handle:
+        np.save(handle, np.asarray(list(supersedes or []), dtype=np.int64))
     with open(os.path.join(staging, SEGMENT_FILE), "w", encoding="utf-8") as handle:
         json.dump({"rows": int(matrix.shape[0]), "dim": int(matrix.shape[1]),
+                   "supersedes": int(len(supersedes or [])),
                    "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
                   handle)
     os.replace(staging, final)
@@ -110,15 +124,31 @@ def load_segment(path: str) -> Optional[Segment]:
         ids = np.load(os.path.join(path, "ids.npy"))
     except (OSError, ValueError):
         return None
+    supersedes_path = os.path.join(path, "supersedes.npy")
+    supersedes = np.zeros(0, dtype=np.int64)
+    if os.path.exists(supersedes_path):
+        try:
+            supersedes = np.asarray(np.load(supersedes_path), dtype=np.int64)
+        except (OSError, ValueError):
+            supersedes = np.zeros(0, dtype=np.int64)
     return Segment(path=path, ids=np.asarray(ids, dtype=np.int64),
-                   vectors=np.asarray(vectors, dtype=np.float32))
+                   vectors=np.asarray(vectors, dtype=np.float32),
+                   supersedes=supersedes)
 
 
 def load_segments(index_dir: str) -> List[Segment]:
+    """Every readable segment, including the ones with no vectors.
+
+    A delete-only segment has **zero rows and a tombstone**, so filtering on
+    `rows` silently discards it and the deleted chunk comes back. That is the
+    bug this comment exists to stop someone reintroducing.
+    """
     segments = []
     for path in segment_paths(index_dir):
         segment = load_segment(path)
-        if segment is not None and segment.rows:
+        if segment is None:
+            continue
+        if segment.rows or len(segment.supersedes):
             segments.append(segment)
     return segments
 
@@ -127,7 +157,7 @@ def drop_segments(index_dir: str) -> int:
     """Delete every segment. Called after a compaction has absorbed them."""
     removed = 0
     for path in segment_paths(index_dir):
-        for name in (VECTORS_FILE, "ids.npy", SEGMENT_FILE):
+        for name in (VECTORS_FILE, "ids.npy", SEGMENT_FILE, "supersedes.npy"):
             target = os.path.join(path, name)
             if os.path.exists(target):
                 os.unlink(target)
@@ -143,24 +173,41 @@ def search(index_dir: str, query_vector: np.ndarray, k: int, *,
            base: Optional["ann_mod.AnnIndex"] = None,
            store=None, cfg=None,
            nprobe: int = 0) -> List[Tuple[int, float]]:
-    """Ask the base and every segment, then merge.
+    """Ask the base and every segment, then merge — with tombstones applied.
 
-    A segment result and a base result are both cosine in [-1, 1], so they can be
-    merged by score without calibration — the same property that lets the router
-    fuse engines.
+    The rule that makes upsert and delete correct: **the newest mention of a
+    chunk id wins**. Walking the segments newest first, an id is settled the
+    moment a segment either provides it (a live vector) or supersedes it (a
+    tombstone). Everything settled is then removed from the base results, so a
+    replaced vector stops competing with the one that replaced it.
+
+    Without that rule an upsert would leave the old vector scoring from the base
+    and the new one scoring from the segment — the same chunk, two answers.
     """
     query = np.asarray(query_vector, dtype=np.float32).reshape(-1)
     norm = float(np.linalg.norm(query)) or 1.0
     query = query / norm
 
     merged: dict = {}
+    settled: set = set()
+    segments = load_segments(index_dir)
+    # newest first: the later the file, the later the write
+    for segment in sorted(segments, key=lambda item: item.created, reverse=True):
+        for chunk_id, score in segment.search(query, k):
+            if int(chunk_id) in settled:
+                continue
+            merged[int(chunk_id)] = float(score)
+            settled.add(int(chunk_id))
+        for chunk_id in segment.supersedes.tolist():
+            settled.add(int(chunk_id))
+
     if base is not None and base.rows:
         for chunk_id, score in base.search(query_vector, k, store=store, cfg=cfg,
                                            nprobe=nprobe):
-            merged[int(chunk_id)] = max(merged.get(int(chunk_id), -2.0), float(score))
-    for segment in load_segments(index_dir):
-        for chunk_id, score in segment.search(query, k):
-            merged[chunk_id] = max(merged.get(chunk_id, -2.0), score)
+            chunk_id = int(chunk_id)
+            if chunk_id in settled:
+                continue                       # replaced or deleted by a segment
+            merged[chunk_id] = max(merged.get(chunk_id, -2.0), float(score))
 
     order = sorted(merged.items(), key=lambda pair: (-pair[1], pair[0]))
     return order[:k]
@@ -170,6 +217,7 @@ def stats(index_dir: str) -> dict:
     segments = load_segments(index_dir)
     return {"segments": len(segments),
             "segment_rows": sum(segment.rows for segment in segments),
+            "tombstones": sum(len(segment.supersedes) for segment in segments),
             "dim": int(segments[0].vectors.shape[1]) if segments else 0}
 
 
@@ -195,9 +243,35 @@ def compact(store, index_dir: str, cfg=None) -> dict:
 
 def append(store, index_dir: str, chunk_ids: Sequence[int],
            cfg=None) -> dict:
-    """Add vectors for these chunks to a new segment. The base is not rewritten."""
+    """Add vectors for chunks the index has never seen. The base is not rewritten."""
+    return _write(store, index_dir, chunk_ids, supersede=False, verb="append")
+
+
+def upsert(store, index_dir: str, chunk_ids: Sequence[int], cfg=None) -> dict:
+    """Add vectors **and** retire the older copies of the same chunk ids.
+
+    An upsert is an append plus a tombstone. Without the tombstone the base keeps
+    serving the old vector and the chunk answers twice.
+    """
+    return _write(store, index_dir, chunk_ids, supersede=True, verb="upsert")
+
+
+def delete(store, index_dir: str, chunk_ids: Sequence[int], cfg=None) -> dict:
+    """Retire these chunk ids. No vectors are written: this is only a tombstone."""
+    ids = [int(chunk_id) for chunk_id in chunk_ids]
+    if not ids:
+        return {"rows": 0, "superseded": 0, "path": "", **stats(index_dir)}
+    path = write_segment(index_dir, np.zeros(0, dtype=np.int64),
+                         np.zeros((0, 0), dtype=np.float32), supersedes=ids)
+    return {"rows": 0, "superseded": len(ids), "path": path, **stats(index_dir)}
+
+
+def _write(store, index_dir: str, chunk_ids: Sequence[int], *,
+           supersede: bool, verb: str) -> dict:
     ids, matrix = store.get_vectors(list(chunk_ids))
     if not ids:
-        return {"rows": 0, "path": ""}
-    path = write_segment(index_dir, np.asarray(ids), np.asarray(matrix))
-    return {"rows": len(ids), "path": path, **stats(index_dir)}
+        return {"rows": 0, "superseded": 0, "path": "", **stats(index_dir)}
+    path = write_segment(index_dir, np.asarray(ids), np.asarray(matrix),
+                         supersedes=ids if supersede else None)
+    return {"rows": len(ids), "superseded": len(ids) if supersede else 0,
+            "path": path, "verb": verb, **stats(index_dir)}

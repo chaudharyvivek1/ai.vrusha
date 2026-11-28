@@ -411,6 +411,14 @@ def bench_index_delta() -> Dict[str, float]:
     delta_mod.append(store, index_dir, new_ids)
     append_ms = (time.perf_counter() - started) * 1000.0
 
+    started = time.perf_counter()
+    delta_mod.upsert(store, index_dir, new_ids[:50])
+    upsert_ms = (time.perf_counter() - started) * 1000.0
+
+    started = time.perf_counter()
+    delta_mod.delete(store, index_dir, new_ids[50:60])
+    delete_ms = (time.perf_counter() - started) * 1000.0
+
     query = rng.normal(size=dim).astype(np.float32)
     query /= np.linalg.norm(query)
     search_ms = _timeit(lambda: delta_mod.search(index_dir, query, 10,
@@ -418,6 +426,7 @@ def bench_index_delta() -> Dict[str, float]:
                         repeats=10)["p50_ms"]
     store.close()
     return {"rebuild_ms": rebuild_ms, "append_ms": append_ms,
+            "upsert_ms": upsert_ms, "delete_ms": delete_ms,
             "ratio": rebuild_ms / max(1e-9, append_ms),
             "search_ms": search_ms, "new_vectors": 200.0}
 
