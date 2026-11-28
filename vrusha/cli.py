@@ -19,6 +19,7 @@
     vrusha derive                 a computed column, from a checked formula
     vrusha joins                  which columns across tables are one entity
     vrusha entities               spellings of one name, across tables
+    vrusha evaluate               measure retrieval and answering on a labelled set
     vrusha board                  the agent blackboard: runs and entries
     vrusha claims                 who holds which task, and for how much longer
     vrusha agents                 the 64 slots: live, dead, free, and their skills
@@ -1065,6 +1066,38 @@ def cmd_board(args, cfg, rules, registry) -> int:
         store.close()
 
 
+def cmd_evaluate(args, cfg, rules, registry) -> int:
+    """Measure retrieval and answering, on the built-in labelled set."""
+    from . import evaluate
+
+    store = _open_store(cfg)
+    try:
+        outcomes = evaluate.run(store, _embedder(cfg), cfg,
+                                top_k=args.top_k,
+                                with_answers=args.answers)
+    finally:
+        store.close()
+    summary = evaluate.summarise(outcomes)
+    if args.json:
+        print(json.dumps({"summary": summary,
+                          "questions": [{"question": o.item.question,
+                                         "document": o.item.document,
+                                         "ranked": o.ranked[:5],
+                                         "passage": o.passage_hit,
+                                         "seconds": round(o.seconds, 3)}
+                                        for o in outcomes]},
+                         indent=2, ensure_ascii=False))
+        return 0
+    print()
+    print(evaluate.render(summary, "vrusha, the built-in set (12 questions)"))
+    if args.verbose:
+        print()
+        for outcome in outcomes:
+            mark = "hit " if evaluate.recall_at_k(outcome.ranked, outcome.item, 5) else "miss"
+            print(f"  {mark} {outcome.item.document:<20} {outcome.item.question[:60]}")
+    return 0
+
+
 def cmd_agents(args, cfg, rules, registry) -> int:
     """The 64 slots: who is live, what skill they carry, when they last beat."""
     from .store.blackboard import Blackboard
@@ -1456,6 +1489,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=200)
     p.add_argument("--all", action="store_true", help="include quarantined entries")
     p.set_defaults(func=cmd_board)
+
+    p = sub.add_parser("evaluate", parents=[common],
+                       help="measure retrieval and answering on a labelled set")
+    p.add_argument("--top-k", type=int, default=5)
+    p.add_argument("--answers", action="store_true",
+                   help="also compose answers, to measure citation accuracy")
+    p.set_defaults(func=cmd_evaluate)
 
     p = sub.add_parser("agents", parents=[common],
                        help="the 64 agent slots: live, dead, free, and their skills")
