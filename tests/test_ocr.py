@@ -10,9 +10,13 @@ sys.path.insert(0, ROOT)
 
 from vrusha.store import ocr
 
+#: Pillow is an optional extra (`pip install vrusha[images]`), not a core
+#: dependency, so only the tests that *build* a PNG need it -- a module-level skip
+#: would hide the other ten from CI.
+
 
 def _png(width=120, height=40):
-    from PIL import Image
+    Image = pytest.importorskip("PIL.Image")   # optional extra: skip, do not fail
     buffer = io.BytesIO()
     Image.new("RGB", (width, height), "white").save(buffer, format="PNG")
     return buffer.getvalue()
