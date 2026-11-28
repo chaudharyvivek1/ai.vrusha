@@ -639,6 +639,23 @@ def bench_compaction() -> Dict[str, float]:
             "verified": 1.0 if verdict["ok"] else 0.0}
 
 
+def bench_anticipate() -> Dict[str, float]:
+    """What a warm hit saves, and what a wrong guess costs."""
+    from vrusha.store import anticipate
+    from vrusha.store.query import Hit
+
+    cache = anticipate.Cache()
+    put = _timeit(lambda: cache.put("q", [Hit(chunk_id=1, address=None, text="t",
+                                              symbol="", kind="prose", lang="en",
+                                              url="u", title="t", licence="MIT",
+                                              scores={})], now=0.0), repeats=50)
+    hit = _timeit(lambda: cache.get("q", now=0.0), repeats=50)
+    miss = _timeit(lambda: cache.get("absent", now=0.0), repeats=50)
+    return {"put_ms": put["p50_ms"], "hit_ms": hit["p50_ms"],
+            "miss_ms": miss["p50_ms"], "cached": float(len(cache)),
+            "budget_ms": anticipate.BUDGET_MS, "max_tasks": float(anticipate.MAX_TASKS)}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -657,6 +674,7 @@ BENCHMARKS: List[tuple] = [
     ("paths", bench_paths, "two-hop search over a chained graph"),
     ("graphboost", bench_graphboost, "the bounded graph boost over 20 hits"),
     ("compaction", bench_compaction, "fold a run into a verified summary"),
+    ("anticipate", bench_anticipate, "the prefetch cache: put, hit, miss"),
 ]
 
 

@@ -297,6 +297,16 @@ class Blackboard:
                  "entries": int(row["entries"]), "head": int(row["head"]),
                  "quarantined": int(row["quarantined"] or 0)} for row in rows]
 
+    def since_of_kind(self, kind: str, limit: int = 50, run: str = "") -> List["Entry"]:
+        """Entries of one kind, newest last. Used by anticipation to find open
+        questions without scanning the whole log."""
+        rows = self.conn.execute(
+            "SELECT * FROM x_board WHERE kind = ? AND quarantined = 0 "
+            + ("AND run = ? " if run else "")
+            + "ORDER BY seq DESC LIMIT ?",
+            ((kind, run, limit) if run else (kind, limit))).fetchall()
+        return [self._row(row) for row in reversed(rows)]
+
     def replay(self, run: str) -> Dict[str, Any]:
         """Fold the log into state: the last finding per task, and every artifact.
 
