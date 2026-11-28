@@ -510,6 +510,25 @@ def bench_edges() -> Dict[str, float]:
             "fixture_evidence": float(sum(1 for e in fixture_edges if e.sentence))}
 
 
+def bench_communities() -> Dict[str, float]:
+    """Label propagation over the edge graph."""
+    from vrusha.store import communities
+
+    # a synthetic graph with a known shape: 20 clusters of 10, sparsely linked
+    pairs = []
+    for cluster in range(20):
+        base = f"entity-{cluster}"
+        for member in range(1, 10):
+            pairs.append((base, f"{base}-{member}"))
+    graph = communities.adjacency(pairs)
+    timings = _timeit(lambda: communities.propagate(graph), repeats=5)
+    labels = communities.propagate(graph)
+    summary = communities.summarise(labels, graph)
+    return {"nodes": float(summary["nodes"]),
+            "communities": float(summary["communities"]),
+            "ms": timings["p50_ms"], "edges": float(len(pairs))}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -524,6 +543,7 @@ BENCHMARKS: List[tuple] = [
     ("snapshot", bench_snapshot, "pin, read and collect index generations"),
     ("entities", bench_entities, "entities from prose, over the whole corpus"),
     ("edges", bench_edges, "relations with evidence, over the whole corpus"),
+    ("communities", bench_communities, "label propagation over a known graph"),
 ]
 
 
