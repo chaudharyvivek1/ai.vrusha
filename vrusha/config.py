@@ -118,6 +118,13 @@ DEFAULTS: Dict[str, Any] = {
         "min_vector_similarity": 0.05,
         "refuse_below": 0.02,
     },
+    "evaluate": {
+        #: Currency per 1,000 tokens. Zero by default because the default answerer
+        #: is local and extractive: reporting a price for a model nobody called
+        #: would be the worst kind of number.
+        "price_per_1k_in": 0.0,
+        "price_per_1k_out": 0.0,
+    },
     "research": {
         #: How many pages to fetch and how many chunks to answer from. The gates
         #: themselves are not configurable here: a short page is still refused.

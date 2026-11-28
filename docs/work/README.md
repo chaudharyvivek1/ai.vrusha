@@ -20,7 +20,7 @@ Status: `[x]` done · `[~]` partly · `[ ]` not started · `[-]` deliberately sk
 | 1 | metrics: recall, precision, MRR, nDCG, citation, faithfulness | `[x]` | [part-01](part-01-metrics.md) |
 | 2 | the 40-question evaluation set, with passage labels | `[x]` | [part-02](part-02-eval-set.md) |
 | 3 | `vrusha evaluate --set` — one command, one table | `[x]` | [part-02](part-02-eval-set.md) |
-| 4 | cost accounting per answered question | `[ ]` | — |
+| 4 | cost accounting per answered question | `[x]` | [part-04](part-04-cost.md) |
 | 5 | BEIR / CRAG subset loader (optional, cached, never in CI) | `[ ]` | — |
 
 ### Phase 1 — documents
@@ -135,3 +135,4 @@ look".
 |---|---|---|
 | before Part 2 | `ruff` on the bug classes that matter, every command, the empty-store path | 1 unused assignment in `pdf.py` that meant positioning ignored the text block; `evaluate` scored an empty store instead of refusing |
 | before Part 2 | packaging | the new `eval_sets/` directory was missing from `package-data`, so the set would not have shipped |
+| before Part 4 | `ruff`, the set loader, a full `evaluate` run | nothing — clean |

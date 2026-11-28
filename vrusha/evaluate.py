@@ -63,6 +63,14 @@ class Outcome:
     cited: List[str] = field(default_factory=list)       # documents the answer cited
     passage_hit: bool = False
     seconds: float = 0.0
+    #: characters of retrieved context, and characters of answer. Tokens are
+    #: estimated from these by `estimate_tokens`; a real tokeniser would be more
+    #: exact and would also make the measurement depend on which tokeniser is
+    #: installed, which is worse for comparing runs.
+    context_chars: int = 0
+    answer_chars: int = 0
+    model_calls: int = 0
+    answered: bool = False
 
     @property
     def first_rank(self) -> int:
@@ -169,11 +177,61 @@ def passage_hit(item: Item, texts: Iterable[str]) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# cost
+# ---------------------------------------------------------------------------
+
+#: Characters per token, the usual rough ratio for English prose. Labelled an
+#: estimate everywhere it is reported: a real tokeniser would be exact and would
+#: also make two runs incomparable when different tokenisers are installed.
+CHARS_PER_TOKEN = 4.0
+
+
+def estimate_tokens(text: str) -> int:
+    return int(math.ceil(len(text or "") / CHARS_PER_TOKEN))
+
+
+@dataclass
+class Cost:
+    """What one question cost, in the three currencies that matter."""
+
+    context_tokens: int = 0
+    answer_tokens: int = 0
+    seconds: float = 0.0
+    model_calls: int = 0
+    usd: float = 0.0
+
+    def to_dict(self) -> dict:
+        return {"context_tokens": self.context_tokens,
+                "answer_tokens": self.answer_tokens,
+                "seconds": round(self.seconds, 3),
+                "model_calls": self.model_calls,
+                "usd": round(self.usd, 6)}
+
+
+def cost_of(outcome: Outcome, *, price_in: float = 0.0,
+            price_out: float = 0.0) -> Cost:
+    """Tokens, seconds and money for one question.
+
+    `price_in` and `price_out` are currency per 1,000 tokens. They default to
+    zero because the default answerer is local and extractive: reporting a made-up
+    price for a model nobody called would be the worst kind of number.
+    """
+    context = estimate_tokens("x" * outcome.context_chars)
+    answer = estimate_tokens("x" * outcome.answer_chars)
+    usd = (context / 1000.0) * float(price_in) + (answer / 1000.0) * float(price_out)
+    return Cost(context_tokens=context, answer_tokens=answer,
+                seconds=outcome.seconds, model_calls=outcome.model_calls,
+                usd=usd)
+
+
+# ---------------------------------------------------------------------------
 # aggregation
 # ---------------------------------------------------------------------------
 
 
-def summarise(outcomes: Sequence[Outcome]) -> Dict[str, float]:
+def summarise(outcomes: Sequence[Outcome], *,
+              price_in: float = 0.0,
+              price_out: float = 0.0) -> Dict[str, float]:
     """One row of the table: every metric, averaged over the questions."""
     if not outcomes:
         return {}
@@ -185,6 +243,13 @@ def summarise(outcomes: Sequence[Outcome]) -> Dict[str, float]:
     citations = [value for value in
                  (citation_accuracy(outcome) for outcome in outcomes)
                  if value is not None]
+    costs = [cost_of(outcome, price_in=price_in, price_out=price_out)
+             for outcome in outcomes]
+    answered = [outcome for outcome in outcomes if outcome.answered]
+
+    def mean_cost(attribute: str, rows) -> float:
+        return (sum(getattr(row, attribute) for row in rows) / len(rows)) if rows else 0.0
+
     return {
         "questions": len(outcomes),
         "recall@1": mean([recall_at_k(o.ranked, o.item, 1) for o in outcomes]),
@@ -199,6 +264,16 @@ def summarise(outcomes: Sequence[Outcome]) -> Dict[str, float]:
         "citation_accuracy": (sum(citations) / len(citations)) if citations else 0.0,
         "cited_questions": len(citations),
         "seconds": mean([o.seconds for o in outcomes]),
+        # cost, per question and per *answered* question: a run that refuses
+        # half its questions is cheap per question and expensive per answer
+        "answered": len(answered),
+        "context_tokens": mean_cost("context_tokens", costs),
+        "answer_tokens": mean_cost("answer_tokens", costs),
+        "usd_per_question": mean_cost("usd", costs),
+        "usd_per_answered": (sum(cost.usd for cost in costs) / len(answered)
+                             if answered else 0.0),
+        "seconds_per_answered": (sum(o.seconds for o in answered) / len(answered)
+                                 if answered else 0.0),
     }
 
 
@@ -240,6 +315,24 @@ def render(summary: Dict[str, float], title: str = "") -> str:
                      f"  questions whose answer cited anything")
     if "seconds" in summary:
         lines.append(f"{'seconds':<18}{summary['seconds']:>9.2f}  mean per question")
+    if "context_tokens" in summary:
+        lines.append("")
+        lines.append("cost")
+        lines.append("-" * 78)
+        lines.append(f"{'answered':<18}{int(summary.get('answered', 0)):>9}"
+                     f"  questions with an answer, of {int(summary['questions'])}")
+        lines.append(f"{'context tokens':<18}{summary['context_tokens']:>9.0f}"
+                     f"  retrieved text, estimated at {CHARS_PER_TOKEN:g} chars/token")
+        lines.append(f"{'answer tokens':<18}{summary['answer_tokens']:>9.0f}"
+                     f"  the answer itself")
+        lines.append(f"{'seconds/answered':<18}{summary['seconds_per_answered']:>9.2f}"
+                     f"  wall clock for a question that got an answer")
+        if summary.get("usd_per_question"):
+            lines.append(f"{'cost/question':<18}{summary['usd_per_question']:>9.4f}"
+                         f"  at the configured price per 1k tokens")
+        else:
+            lines.append(f"{'cost/question':<18}{'local':>9}"
+                         f"  no model was called, so there is no token price")
     return "\n".join(lines)
 
 
@@ -309,11 +402,17 @@ def run(store, embedder, cfg: dict, items: Sequence[Item] = DOCS_SET,
                           ranked=[getattr(hit, "url", "") or "" for hit in hits],
                           ranks=[int(getattr(hit, "chunk_id", 0)) for hit in hits],
                           passage_hit=passage_hit(
-                              item, [getattr(hit, "text", "") for hit in hits]))
+                              item, [getattr(hit, "text", "") for hit in hits]),
+                          context_chars=sum(len(getattr(hit, "text", "") or "")
+                                            for hit in hits))
         if with_answers:
             from .answer import ask
             answer = ask(store, embedder, item.question, cfg, top_k=top_k)
             outcome.answer = getattr(answer, "text", "") or ""
+            outcome.answer_chars = len(outcome.answer)
+            outcome.answered = bool(outcome.answer)
+            outcome.model_calls = 1 if getattr(answer, "method", "") not in (
+                "", "extractive") else 0
             outcome.cited = [str(citation.get("url", ""))
                              for citation in (getattr(answer, "citations", []) or [])
                              if isinstance(citation, dict)]
