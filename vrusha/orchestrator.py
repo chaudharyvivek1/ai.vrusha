@@ -313,7 +313,8 @@ def run_remote(store, board, claims, registry, cfg, goal: str, *,
 def run_stages(store, board, claims, registry, cfg, goal: str, *,
                stages: Sequence[Sequence[str]],
                worker: Callable[[str], str], workers: int = DEFAULT_WORKERS,
-               run_id: str = "", store_factory: Optional[Callable] = None) -> Run:
+               run_id: str = "", store_factory: Optional[Callable] = None,
+               skip_if: Optional[Callable] = None) -> Run:
     """Tasks in **waves**: every task in a stage finishes before the next begins.
 
     `run_pool` maps a flat list concurrently, so a task that needs another task's
@@ -359,6 +360,15 @@ def run_stages(store, board, claims, registry, cfg, goal: str, *,
     def work(index: int) -> None:
         task = result.tasks[index]
         name = f"L3/worker-{index % max(1, workers)}"
+        # A task whose dependencies did not succeed must not run at all: running it
+        # on missing input and failing it afterwards is not a barrier.
+        if skip_if is not None:
+            reason = skip_if(task.name, result)
+            if reason:
+                task.state, task.error = "failed", reason
+                board.append(run_id, task=task.name, agent="L2/admin",
+                             kind="error", summary=reason[:400])
+                return
         registry.register(run_id, name, level="L3", skill="work")
         granted = claims.claim(run_id, task.name, name, ttl=120)
         if not granted.granted:
@@ -401,3 +411,83 @@ def run_stages(store, board, claims, registry, cfg, goal: str, *,
         result.entries = len(board.since(run_id, 0, limit=1000))
         result.seconds = time.perf_counter() - started
     return result
+
+
+# ---------------------------------------------------------------------------
+# The second shape: a dependency graph
+# ---------------------------------------------------------------------------
+
+
+class CycleError(ValueError):
+    """A task graph with a cycle cannot be scheduled, and says where."""
+
+
+def levels(tasks: Sequence[tuple]) -> List[List[str]]:
+    """`[(name, [after...])]` -> the waves a scheduler can run.
+
+    `run_stages` orders tasks linearly, which is one shape of dependency. This is
+    the general one: a task names what it waits for, and the waves fall out of the
+    graph. `B` and `C` both depending on `A` land in the same wave; `D` depending on
+    both waits for both.
+
+    Raises `CycleError` with the cycle, because a cycle is a mistake in the caller's
+    plan and running it partially would hide it.
+    """
+    names = [name for name, _ in tasks]
+    if len(set(names)) != len(names):
+        seen, duplicates = set(), set()
+        for name in names:
+            (duplicates if name in seen else seen).add(name)
+        raise ValueError(f"duplicate task name(s): {', '.join(sorted(duplicates))}")
+
+    after: Dict[str, List[str]] = {}
+    for name, dependencies in tasks:
+        after[name] = list(dependencies or [])
+        for dependency in after[name]:
+            if dependency not in names:
+                raise ValueError(f"{name!r} depends on {dependency!r}, "
+                                 f"which is not in the graph")
+
+    waves: List[List[str]] = []
+    done: set = set()
+    remaining = dict(after)
+    while remaining:
+        wave = sorted(name for name, deps in remaining.items()
+                      if all(dependency in done for dependency in deps))
+        if not wave:
+            raise CycleError("the task graph has a cycle: "
+                             + " -> ".join(sorted(remaining)))
+        waves.append(wave)
+        done.update(wave)
+        for name in wave:
+            remaining.pop(name)
+    return waves
+
+
+def run_graph(store, board, claims, registry, cfg, goal: str, *,
+              tasks: Sequence[tuple], worker: Callable, workers: int = DEFAULT_WORKERS,
+              run_id: str = "", store_factory: Optional[Callable] = None) -> Run:
+    """Run a dependency graph: every task waits for what it declares.
+
+    **A blocked task fails explicitly.** If `A` fails, every task that depends on
+    `A` is marked failed with `blocked by A` rather than run on missing input --
+    the partial-result policy the staged version left undefined.
+    """
+    waves = levels(tasks)
+    after = {name: list(dependencies or []) for name, dependencies in tasks}
+    run_id = run_id or f"run-{int(time.perf_counter() * 1000)}-{uuid.uuid4().hex[:6]}"
+
+    def skip_if(name: str, partial: Run):
+        states = {task.name: task for task in partial.tasks}
+        blocked = [dependency for dependency in after.get(name, [])
+                   if states.get(dependency) is not None
+                   and states[dependency].state != "done"]
+        return f"blocked by {', '.join(sorted(blocked))}" if blocked else None
+
+    run = run_stages(store, board, claims, registry, cfg, goal, stages=waves,
+                     worker=worker, workers=workers, run_id=run_id,
+                     store_factory=store_factory, skip_if=skip_if)
+    # `Run.done` and `Run.failed` are computed from the task states, so blocking a
+    # task is enough -- assigning to them raised `AttributeError: property has no
+    # setter`, which is the class doing its job.
+    return run
