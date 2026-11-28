@@ -42,8 +42,8 @@ Status: `[x]` done · `[~]` partly · `[ ]` not started · `[-]` deliberately sk
 |---|---|---|
 | 14 | the reranker seam | `[x]` | [part-14](part-14-rerank-seam.md) |
 | 15 | a lexical reranker (no model) | `[x]` | [part-15](part-15-lexical-rerank.md) |
-| 16 | an optional cross-encoder (ONNX) | `[ ]` |
-| 17 | the honest comparison, and the decision | `[~]` | [part-15](part-15-lexical-rerank.md) — decided early; Part 16 may reopen it |
+| 16 | an optional cross-encoder (ONNX) | `[x]` | [part-16](part-16-cross-encoder.md) — built, **not adopted**: 755 MB/batch
+| 17 | the honest comparison, and the decision | `[x]` | [part-15](part-15-lexical-rerank.md), [part-16](part-16-cross-encoder.md) — lexical opt-in, cross-encoder not adopted |
 
 ### Phase 3 — incremental indexing
 
@@ -138,6 +138,7 @@ look".
 | before Part 4 | `ruff`, the set loader, a full `evaluate` run | nothing — clean |
 | before Part 14 | `ruff`, the 40-question run, the set loader | nothing — clean |
 | before Part 15 | `ruff`, the 40-question run, the benchmark inventory | 39 modules had no benchmark — now measured or exempted with a reason |
+| before Part 16 | `ruff`, the 40-question run | the reranker was handed all 60 candidates, not the top of the list |
 
 ## The benchmark list
 
