@@ -365,12 +365,22 @@ def retrieve(store: Store, embedder, query: str, cfg: dict,
     vector_map = dict(vector)
     order = sorted(fused.items(), key=lambda kv: (-kv[1], kv[0]))[:candidates]
 
+    # One query for every candidate, not one per candidate. The per-chunk
+    # SELECT was 62 round trips per query and 68% of `retrieve()`: an N+1 that
+    # a profile found and nothing else would have.
+    wanted = [chunk_id for chunk_id, _score in order]
+    rows = {}
+    if wanted:
+        placeholders = ",".join("?" * len(wanted))
+        for row in store.conn.execute(
+                f"""SELECT c.*, d.url AS url, d.title AS title, d.licence AS licence
+                    FROM chunks c JOIN documents d ON d.doc_id = c.doc_id
+                    WHERE c.chunk_id IN ({placeholders})""", wanted).fetchall():
+            rows[int(row["chunk_id"])] = row
+
     hits: List[Hit] = []
     for chunk_id, fused_score in order:
-        row = store.conn.execute(
-            """SELECT c.*, d.url AS url, d.title AS title, d.licence AS licence
-               FROM chunks c JOIN documents d ON d.doc_id = c.doc_id
-               WHERE c.chunk_id = ?""", (chunk_id,)).fetchone()
+        row = rows.get(chunk_id)
         if row is None or not row["active"]:
             continue
         address = Address.parse(row["address"]) if row["address"] else None

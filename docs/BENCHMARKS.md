@@ -437,6 +437,49 @@ Small-corpus caveat, stated: 2,373 chunks is 19 cells, so `nprobe` 2 is 10% of
 the cells but only 234 rows. At a million chunks the same 10% is 100,000 rows,
 and the latency moves with the rows, not with the corpus.
 
+## `retrieve()`: where the time actually went
+
+With the address ranking at 2.5 ms, `bench/retrieve_stages.py` asked the next
+question: what is the rest of the query? The answer was not the algorithm. A
+`cProfile` run over 80 queries showed **5,120 `execute` calls and 4,960
+`fetchone` calls** — 62 of each per query.
+
+That was an **N+1**: after fusion, every candidate chunk was hydrated with its own
+`SELECT … WHERE chunk_id = ?`. Sixty candidates, sixty round trips, to fetch
+sixty rows.
+
+| | before | after |
+|---|---|---|
+| `retrieve()` p50 | 11.76 ms | **5.88 ms** |
+| `retrieve()` p95 | 28.42 ms | **6.73 ms** |
+| `execute` calls per query | 64 | **5** |
+| hydration queries per query | 60 | **1** |
+
+The p95 is the number that matters for a server: **4× better tail**, because the
+tail was the sum of sixty round trips and now it is one.
+
+### What is left
+
+| stage | p50 | share |
+|---|---|---|
+| embed (model2vec, one short query) | 0.17 ms | 3% |
+| bm25 (FTS5, 60 candidates) | 1.94 ms | 33% |
+| vector (60 candidates, from SQLite) | 1.67 ms | 28% |
+| fusion + hydration + rerank | ~2.1 ms | 36% |
+
+`bm25` and the vector read are now the two real costs, and both are the same
+kind of thing: reading 60 rows out of SQLite. That is where the next
+optimisation goes, and it is worth saying plainly that it is a *constant factor*
+— the algorithm is no longer the problem at this size.
+
+```bash
+python bench/retrieve_stages.py
+```
+
+A regression test guards the shape, not the speed: `retrieve()` must issue
+**one** hydration statement, because the failure mode here is a silent slowdown
+with correct answers.
+
 ## Reproducing this
 
 ```bash

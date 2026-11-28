@@ -156,3 +156,41 @@ def test_ordinals_only_matter_inside_one_cluster(tmp_path):
     offset = chunk_of[Address.parse("1.2.3.1.4").segments]
     assert scores[exact] > scores[offset], "the ordinal is a weak penalty, not a tie"
     store.close()
+
+
+def test_hydration_is_one_query_not_one_per_candidate(tmp_path):
+    """The N+1 that was 68% of `retrieve()`: 62 round trips per query.
+
+    A regression test rather than a benchmark, because the failure mode is a
+    silent slowdown: the answers stay correct and the latency triples.
+    """
+    from vrusha.config import DEFAULTS as _DEFAULTS
+    from vrusha.store.embed import HashEmbedder
+    from vrusha.store.query import retrieve
+
+    cfg = {key: (dict(value) if isinstance(value, dict) else value)
+           for key, value in _DEFAULTS.items()}
+    cfg["paths"] = dict(_DEFAULTS["paths"])
+    cfg["paths"]["root"] = str(tmp_path)
+    ensure_dirs(cfg)
+    store = Store(resolve(cfg, "db"))
+    doc = store.add_document(url="https://a.test/1", title="a", text="body " * 200)
+    embedder = HashEmbedder(64)
+    for index in range(40):
+        chunk = store.add_chunk(doc, f"address {index} is a path of numbers " * 4,
+                                kind="prose")
+        store.set_vector(chunk, embedder.encode_one(f"address {index}"))
+    store.commit()
+
+    # `set_trace_callback` watches every statement without replacing `conn`
+    statements = []
+    store.conn.set_trace_callback(statements.append)
+    try:
+        retrieve(store, embedder, "what is an address", cfg)
+    finally:
+        store.conn.set_trace_callback(None)
+
+    hydrations = [sql for sql in statements if "JOIN documents" in sql]
+    assert len(hydrations) == 1, f"hydration ran {len(hydrations)} times"
+    assert "chunk_id IN" in hydrations[0]
+    store.close()
