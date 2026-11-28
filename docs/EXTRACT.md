@@ -156,7 +156,7 @@ large.
 
 ## Implemented so far
 
-Steps 1 to 6 of the plan are in, with tests:
+Steps 1 to 7 of the plan are in, with tests:
 
 ```bash
 vrusha extract --dir ./pages --licence MIT    # html tables + csv -> typed rows
@@ -202,7 +202,7 @@ for `unchanged` (refresh `retrieved`) and `gone` (record the status).
 4. ~~JSON-LD and schema.org~~ — done (`vrusha/store/jsonld.py`).
 5. ~~PDF tables~~ — done (`vrusha/store/pdf.py`, no PDF dependency).
 6. ~~SearXNG + trafilatura, and `harvest --extract`~~ — done.
-7. **Relation inference** across tables (entity keys, join edges, confidence).
+7. ~~Relation inference~~ — done (`vrusha/store/relations.py`, `vrusha joins`).
 8. **Tier 2 sandboxed scripts** — last, because it is the only irreversible
    risk in the list, and a subprocess is not a sandbox.
 
@@ -329,6 +329,37 @@ banner in a `div`, a sidebar, a "related articles" block. It only removes what
 it can tell apart from content, so on a thin page it keeps everything, which is
 the safe direction. That is why the default stays `simple`: a corpus should not
 change character because an optional package happens to be installed.
+
+## Relations between tables
+
+Six tables from six pages are six piles of rows until something says `sku` in
+one is `sku` in another. `vrusha joins --build` finds those, and stores the
+evidence rather than a claim:
+
+```bash
+vrusha joins --build      # infer and store
+vrusha joins              # what it found, with the numbers
+vrusha joins --table 3    # one table's relations
+```
+
+```
+  left  column  right  column  shared  overlap  kind
+  3     plan    4      plan    3       100%     same-column
+  3     plan    6      plan    3       100%     same-column
+```
+
+| rule | why |
+|---|---|
+| a key must be unique, non-null and short | a column with duplicates is a category, not an identifier |
+| **a mostly-numeric column is a measure** | two tables sharing the value `123456` share a number, not a thing — the first run joined `price` and `uptime` and was wrong |
+| unless the name says identity | `sku`, `id`, `code`, `name` are keys even when numeric |
+| overlap is Jaccard, `shared` is the count | `overlap: 1.0, shared: 3` is a fact; `overlap: 0.4, shared: 2` is a coincidence to look at |
+| each pair is stored once, in a stable order | a re-run produces the same rows |
+| nothing joins automatically | the edges are for a human to accept before a query relies on them |
+
+What it does not do: entity resolution (two spellings of one vendor), transitive
+closure across a chain of joins, or fuzzy matching. Each can be wrong in a way
+that silently merges two companies into one.
 
 ## Known limits, stated
 
