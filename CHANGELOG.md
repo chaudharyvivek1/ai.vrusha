@@ -8,6 +8,31 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 72 — the graph on the real goal · PR #69
+
+- `vrusha/compare.py` — `multistep(..., shape="stages"|"graph")`, so the company
+  comparison can be run both ways and compared
+- `tests/test_compare.py` — 3 more tests
+
+**Measured, with fresh run ids:**
+
+| shape | facts | context | entries | seconds |
+|---|---|---|---|---|
+| stages | 3/3 | 921 | 6 | 0.70 / 2.06 |
+| **graph** | **3/3** | **921** | **6** | 0.71 / 1.09 |
+
+**They agree exactly** — the graph is a generalisation that does not change behaviour
+on a linear plan, which is the correctness check it needed. The seconds vary 3×
+between runs of the same shape: pod noise, not a speedup.
+
+**The measurement bug this exposed:** running each shape twice with the same
+`run_id` made the numbers look *better* — a second run finds its tasks already
+claimed, so nothing runs, and the first run's findings are still on the board. **The
+wave 55 run-id collision again, in a new place, and in the dangerous direction.** A
+test now pins it.
+
+---
+
 ## Wave 71 — the second shape: a dependency graph · PR #68
 
 - `vrusha/orchestrator.py` — `levels()` computes waves from `[(name, [after...])]`;
