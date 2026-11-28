@@ -8,6 +8,26 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 27 — branch cleanup, and the plan salvaged · PR #23
+
+24 branches, all of them debris from squash merges: a squash merge does not
+record the branch as merged, so every `wave-*` branch stayed behind.
+
+- every branch verified before deletion: 22 were **0 commits ahead** of main, and
+  the other two (`wave-8-extract-design`, `wave-10-formulas`) held only commits
+  that had already landed as waves 9 and 10 plus the closed design doc
+- the one thing main had lost — the design doc's **build order**, and with it the
+  reason tier-2 scripts came last — is now a section in `docs/EXTRACT.md`
+- all 24 branches deleted, with their commit SHAs recorded in
+  `branches-removed.txt` so anything can be restored
+
+**The lesson:** a squash-merge workflow needs a branch-deletion step, or the
+branch list becomes a history nobody reads. The two branches that looked
+unmerged were not work in progress; they were the same work under a different
+name.
+
+---
+
 ## Wave 26 — entity resolution · PR #22
 
 The gap `relations.py` named in its own docstring: exact joins, no fuzzy matching.
