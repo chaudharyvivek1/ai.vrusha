@@ -8,6 +8,28 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 67 — the graph boost, on a corpus that has a graph · PR #64
+
+- `vrusha/store/graphboost.py` — `_query_communities` matches a query entity against
+  stored community names by **prefix**, not exact equality
+- `tests/test_graphboost.py` — 3 more tests
+
+**The bug:** `_query_communities` looked up the query's entity by exact equality. A
+question says `Alpha Design Technologies`; the graph stored `Alpha Design
+Technologies Pvt Ltd`. The lookup returned an **empty set for all ten questions**, so
+`boost()` had no communities and every rank was untouched. **Part 26 measured this as
+a no-op and concluded "no edges" — the real reason was a dead code path no corpus
+could have exercised.**
+
+**The measurement, after the fix:** boost off against boost on, on 10 questions over
+118 edges and 41 communities — **0.000 delta on recall@1, recall@5, nDCG@10 and
+MRR**. The mechanism now fires; the effect is still zero, because at 118 edges over
+152 nodes a candidate that shares a community is almost never in the top 5.
+
+**The default stays `off`**, now for a measured reason rather than a corpus gap.
+
+---
+
 ## Wave 66 — resolution wired into the graph · PR #63
 
 - `vrusha/store/entities.py` — `canonical_map()`: the resolver's algorithm applied to

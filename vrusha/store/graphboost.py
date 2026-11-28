@@ -59,7 +59,26 @@ def _query_communities(store, query: str) -> set:
             f"({','.join('?' * len(names))})", list(names)).fetchall()
     except Exception:                        # noqa: BLE001
         return set()
-    return {int(row["community"]) for row in rows}
+    found = {int(row["community"]) for row in rows}
+    if found:
+        return found
+
+    # Exact equality is too strict to ever fire: a question says `Alpha Design
+    # Technologies` and the graph stored `Alpha Design Technologies Pvt Ltd`, so
+    # `_query_communities` returned an EMPTY set for all ten questions on the real
+    # corpus and the boost could not move a single rank. A prefix match is the
+    # narrow fix -- it cannot merge two different companies, because a prefix is a
+    # prefix, not a similarity score.
+    try:
+        for name in names:
+            for row in store.conn.execute(
+                    "SELECT community FROM x_communities "
+                    "WHERE name LIKE ? OR ? LIKE name || '%'",
+                    (name + "%", name)).fetchall():
+                found.add(int(row["community"]))
+    except Exception:                        # noqa: BLE001
+        return found
+    return found
 
 
 def boost(store, query: str, hits: Sequence, *, weight: float = DEFAULT_WEIGHT,
