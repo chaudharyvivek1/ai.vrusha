@@ -61,7 +61,7 @@ Status: `[x]` done · `[~]` partly · `[ ]` not started · `[-]` deliberately sk
 | 22 | entity extraction from prose | `[x]` | [part-22](part-22-prose-entities.md) |
 | 23 | relation extraction with evidence | `[x]` | [part-23](part-23-relations.md) |
 | 24 | community detection | `[x]` | [part-24](part-24-communities.md) |
-| 25 | multi-hop expansion | `[ ]` |
+| 25 | multi-hop expansion | `[x]` | [part-25](part-25-paths.md) |
 | 26 | bounded graph ranking | `[ ]` |
 
 ### Phase 5 — compaction

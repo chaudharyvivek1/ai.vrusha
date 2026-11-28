@@ -8,6 +8,27 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 50 — Part 25: multi-hop paths · PR #46
+
+- `vrusha/store/paths.py` — breadth-first path search, `max_hops` enforced, every
+  hop carrying the sentence that asserted it; path confidence is the **weakest**
+  hop; `expand()` returns everything within N hops, nearest first
+- `bench/registry.py` — `paths`; `docs/benchmarks/15-paths.md`
+- `tests/test_paths.py` — 12 tests
+
+**Measured:** a two-hop search over a 199-edge chained graph costs **2.77 ms**.
+
+**Two properties, both tested:** every hop carries its evidence (a path is only as
+good as its weakest edge, so the confidence is the minimum, not the average), and
+the hop cap is a hard limit — a 3-hop path is **not found** at `max_hops=2`, because
+two hops is a plausible claim and five is "everything is connected".
+
+**My own demonstration was wrong:** I expected `Meera Rao → Acme Corporation` to
+have a path; they are in two disjoint components. The code was right and the example
+was wrong — a graph saying "no path" is usually telling the truth about the data.
+
+---
+
 ## Wave 49 — Part 24: communities by label propagation · PR #45
 
 - `vrusha/store/communities.py` — label propagation over the entity graph; nodes

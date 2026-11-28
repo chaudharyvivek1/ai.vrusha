@@ -529,6 +529,36 @@ def bench_communities() -> Dict[str, float]:
             "ms": timings["p50_ms"], "edges": float(len(pairs))}
 
 
+def bench_paths() -> Dict[str, float]:
+    """Two-hop path search over a graph of a known shape."""
+    import tempfile as _tempfile
+
+    from vrusha.store import edges as edges_mod
+    from vrusha.store import paths as paths_mod
+    from vrusha.store.db import Store
+
+    store = Store(_tempfile.mktemp(suffix=".db"))
+    # 20 clusters of 10, chained: cluster i connects to cluster i+1 through one
+    # edge, so a 2-hop path exists only where the chain links them
+    rows = []
+    for cluster in range(20):
+        base = f"entity-{cluster}"
+        for member in range(1, 10):
+            rows.append((base, f"{base}-{member}"))
+        if cluster:
+            rows.append((f"entity-{cluster - 1}", base))
+    edges_mod.store_edges(store, [
+        edges_mod.Edge(subject=left, predicate="linked_to", object=right,
+                       sentence=f"{left} linked to {right}.", confidence=0.8)
+        for left, right in rows], doc_id=1)
+    timings = _timeit(lambda: paths_mod.find(store, "entity-0", "entity-2",
+                                             max_hops=2), repeats=20)
+    found = paths_mod.find(store, "entity-0", "entity-2", max_hops=2)
+    store.close()
+    return {"ms": timings["p50_ms"], "edges": float(len(rows)),
+            "hops": float(found["hops"]) if found else 0.0}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -544,6 +574,7 @@ BENCHMARKS: List[tuple] = [
     ("entities", bench_entities, "entities from prose, over the whole corpus"),
     ("edges", bench_edges, "relations with evidence, over the whole corpus"),
     ("communities", bench_communities, "label propagation over a known graph"),
+    ("paths", bench_paths, "two-hop search over a chained graph"),
 ]
 
 
