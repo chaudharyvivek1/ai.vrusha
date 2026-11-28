@@ -8,6 +8,30 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 62 — Part 38: external datasets, Phase 7 closed · PR #59
+
+- `vrusha/eval_sets/beir.py` — the BEIR format (corpus/queries/qrels), a scorer for
+  recall, precision, MRR and nDCG against **someone else's judgements**, and a
+  bundled five-document fixture so CI exercises the loader
+- `bench/registry.py` — `beir`; `docs/benchmarks/26-beir.md`
+- `tests/test_beir.py` — 14 tests, three of them malformed sets
+
+**Measured:** reading the fixture 1.9 ms, scoring one query 11.7 µs.
+
+**Datasets, not leaderboards:** `MASTER-PLAN.md` refused to chase a published score
+because the suites are saturated or contaminated. That refusal does not extend to
+*data* — a BEIR set is queries and judgements, and running it says whether this
+retriever works on someone else's corpus.
+
+**What is not measured:** a real download. `huggingface.co` answers 200 but the
+dataset file endpoints 404 from this sandbox, and the official BEIR host refuses.
+The format is tested; the bytes are a download away.
+
+**Phase 7 closed** with three honest "not measured" — no browser, no OCR binary, no
+dataset host. Each part is a seam with a default that declines.
+
+---
+
 ## Wave 61 — Part 37: images — metadata measured, text a seam · PR #57
 
 - `vrusha/store/ocr.py` — magic-byte detection (not extensions), `describe()` for

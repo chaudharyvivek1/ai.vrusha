@@ -880,6 +880,20 @@ def bench_ocr() -> Dict[str, float]:
             "bytes": float(len(data))}
 
 
+def bench_beir() -> Dict[str, float]:
+    """Reading a BEIR set, and scoring one query against its labels."""
+    from vrusha.eval_sets import beir
+
+    loaded = beir.bundled()
+    read = _timeit(lambda: beir.bundled(), repeats=10)
+    ranking = [row["_id"] for row in loaded.corpus]
+    relevant = loaded.qrels[loaded.queries[0]["_id"]]
+    score = _timeit(lambda: beir.score(ranking, relevant, 10), repeats=50)
+    return {"read_ms": read["p50_ms"], "score_us": score["p50_ms"] * 1000.0,
+            "documents": float(loaded.documents),
+            "queries": float(len(loaded.queries))}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -906,6 +920,7 @@ BENCHMARKS: List[tuple] = [
     ("compare", bench_compare, "four levels against one agent, same questions"),
     ("render", bench_render, "shell detection, which must be free"),
     ("ocr", bench_ocr, "identifying an image, which needs no binary"),
+    ("beir", bench_beir, "reading a BEIR set and scoring one query"),
 ]
 
 
