@@ -6,9 +6,11 @@ went nowhere.
 
 Two things are separable here, and only one of them needs a system binary:
 
-**What an image is** — format, dimensions, mode — is pure Python through Pillow,
-which this project already depends on. That is measured below and it is useful on
-its own: a pipeline can record "this page had a 1200×800 PNG" without any OCR.
+**What an image is** — format, dimensions, mode — needs Pillow, which is an
+**optional extra** (`pip install vrusha[images]`), not a core dependency. Without it
+`describe()` still returns the format and byte count and records the missing
+dependency in an `error` key, so a machine without Pillow degrades instead of
+failing.
 
 **What an image says** needs Tesseract, a system binary. It is a seam, like the
 browser in Part 36: `NullOcr` is the default and declines, `TesseractOcr` is

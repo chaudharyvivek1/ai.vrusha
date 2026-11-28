@@ -20,6 +20,9 @@ dependencies = ["numpy>=1.24"]
 fast = ["tokenizers>=0.15"]
 # Training and generation. Without it everything except `train`/`generate` works.
 train = ["torch>=2.0"]
+# Image dimensions and format. Without it `describe()` reports the format and
+# byte count only, and says why.
+images = ["Pillow>=10"]
 # In-process embeddings instead of the hash backend.
 embed = ["sentence-transformers>=2.2"]
 all = ["tokenizers>=0.15", "torch>=2.0", "sentence-transformers>=2.2"]
