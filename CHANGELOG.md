@@ -8,6 +8,27 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 46 — Part 21: versioned snapshots, and Phase 3 closed · PR #42
+
+- `vrusha/store/snapshot.py` — a **generation** in a `CURRENT` file bumped after
+  every swap; a **pin** naming a generation a reader is using; **gc** that deletes
+  old generations except the pinned and the newest few
+- `safe_compact()` archives the generation it replaces, publishes a new one, and
+  collects — so a reader that pinned the old generation keeps its files
+- `bench/registry.py` — `snapshot`; `docs/benchmarks/11-snapshot.md`
+
+**The rule, in one sentence: a pinned generation is never deleted.** A long query
+or a slow reader holds a snapshot for as long as it likes without a compaction
+pulling the files out from under it.
+
+**Measured:** pin 2.29 ms, read `CURRENT` 0.47 ms, gc 1.26 ms — cheap enough to
+take one pin per query.
+
+**Phase 3 is closed:** delta segments (24× faster than a rebuild), upsert and
+delete with tombstones, compaction with a breakable lock, and snapshots.
+
+---
+
 ## Wave 45 — Part 20: compaction, and a benchmark report per subsystem · PR #41
 
 - `vrusha/store/delta.py` — `safe_compact()` builds the new base in `<index>.new`
