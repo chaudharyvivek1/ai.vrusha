@@ -133,9 +133,17 @@ def extract(text: str) -> List[Entity]:
         elif len(run) >= 2:
             kind, confidence = "proper", 0.5
 
-        # a leading article is not part of the name: `The Reserve Bank of India`
-        # is `Reserve Bank of India`
-        while len(run) > 1 and run[0].lower() in ("the", "a", "an"):
+        # a leading article or preposition is not part of the name: `The Reserve
+        # Bank of India` is `Reserve Bank of India`, and `In April Adani Defence
+        # Systems` is `Adani Defence Systems`. Found on a real corpus -- the docs
+        # corpus never produced a run long enough to expose it.
+        leading = {"the", "a", "an"} | set(PLACE_PREPS)
+        while len(run) > 1 and run[0].lower() in leading:
+            run.pop(0)
+        # a month inside a name is a date that got swept up
+        while len(run) > 1 and run[0].lower() in (
+                "january", "february", "march", "april", "may", "june", "july",
+                "august", "september", "october", "november", "december"):
             run.pop(0)
         surface = " ".join(run)
         if len(surface) > 2:
