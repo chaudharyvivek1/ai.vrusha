@@ -17,6 +17,7 @@
     vrusha extract --dir PATH     html tables and csv into typed rows
     vrusha tables                 the extracted tables, and their schemas
     vrusha derive                 a computed column, from a checked formula
+    vrusha joins                  which columns across tables are one entity
     vrusha verify --refetch       is what we stored still true?
     vrusha index build            the vector index: routed scan over int8
     vrusha index export           push the same chunks into RagForge
@@ -853,6 +854,37 @@ def cmd_derive(args, cfg, rules, registry) -> int:
     return 0
 
 
+def cmd_joins(args, cfg, rules, registry) -> int:
+    """Which columns across tables are the same entity, and how sure we are."""
+    from .store import relations
+
+    store = _open_store(cfg)
+    try:
+        if args.build:
+            result = relations.build(store, min_overlap=args.min_overlap,
+                                     min_shared=args.min_shared)
+            if args.json:
+                print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            else:
+                print(f"  {result['joins']} join(s) across {result['tables']} table(s)")
+            return 0
+        joins = relations.list_joins(store, table_id=args.table)
+    finally:
+        store.close()
+
+    if args.json:
+        print(json.dumps(joins, indent=2, ensure_ascii=False, default=str))
+        return 0
+    if not joins:
+        print("no joins yet: `vrusha joins --build` infers them from the tables")
+        return 0
+    rows = [[str(j["left_table"]), j["left_column"], str(j["right_table"]),
+             j["right_column"], str(j["shared"]), f"{j['overlap']:.0%}", j["kind"]]
+            for j in joins]
+    _print_table(rows, ["left", "column", "right", "column", "shared", "overlap", "kind"])
+    return 0
+
+
 def cmd_verify(args, cfg, rules, registry) -> int:
     from .verify import format_results, run_verify, summarise
     if getattr(args, "refetch", False):
@@ -1049,6 +1081,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=0, help="files to process")
     p.add_argument("--mdy", action="store_true", help="month-first dates (US corpora)")
     p.set_defaults(func=cmd_extract)
+
+    p = sub.add_parser("joins", parents=[common],
+                       help="which columns across tables are the same entity")
+    p.add_argument("--build", action="store_true", help="infer and store the edges")
+    p.add_argument("--table", type=int, default=0, help="only this table's joins")
+    p.add_argument("--min-overlap", type=float, default=0.5)
+    p.add_argument("--min-shared", type=int, default=2)
+    p.set_defaults(func=cmd_joins)
 
     p = sub.add_parser("derive", parents=[common],
                        help="add a computed column to an extracted table")
