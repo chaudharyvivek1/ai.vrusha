@@ -61,7 +61,10 @@ DEFAULTS: Dict[str, Any] = {
         "backend": "auto",             # auto | fixtures | ddg | searxng | tavily | brave
     },
     "store": {
-        "embed_backend": "hash",       # hash | model2vec | ollama | sentence-transformers
+        #: model2vec by default: 8 MB, numpy-only, and real semantics. Falls
+        #: back to `hash` (and says so) when the package is absent, which keeps
+        #: a machine with no network working.
+        "embed_backend": "model2vec",  # model2vec | hash | ollama | sentence-transformers
         "embed_model": "qwen3-embedding:0.6b",
         #: model2vec's static model. ~8 MB, numpy-only inference, no torch: the
         #: right default for a laptop, and a real step up from `hash`.

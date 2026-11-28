@@ -311,6 +311,14 @@ def retrieve(store: Store, embedder, query: str, cfg: dict,
         result.notes.append(
             f"vector width mismatch: store {stored_dim}, embedder {embedder_dim} "
             f"-- the vector signal is disabled; re-embed or fix store.embed_dim")
+    recorded = store.embedder_name()
+    current = str(getattr(embedder, "name", "") or "")
+    if recorded and current and recorded != current:
+        result.notes.append(
+            f"warning: this store's vectors came from {recorded!r} but this "
+            f"query used {current!r}; the vector signal is comparing two "
+            f"different spaces. Re-embed, or point the config at {recorded!r}.")
+
     bm25 = store.fts_search(query, limit=candidates)
     if router is not None:
         try:

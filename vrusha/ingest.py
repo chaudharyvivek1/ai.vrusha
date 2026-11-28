@@ -83,6 +83,8 @@ def ingest_documents(
     verbose: bool = False,
 ) -> IngestReport:
     report = IngestReport()
+    # refuse to mix two embedders in one store, before a single row is written
+    store.set_embedder(str(getattr(embedder, "name", "") or ""))
     index = store.duplicate_index()
     manifest_rows: List[Document] = []
     dtype = cfg.get("store", {}).get("vector_dtype", "float32")

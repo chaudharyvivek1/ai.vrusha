@@ -354,6 +354,37 @@ class Store:
         row = self.conn.execute("SELECT value FROM meta WHERE key='embed_dim'").fetchone()
         return int(row[0]) if row else None
 
+    def embedder_name(self) -> Optional[str]:
+        """Which embedder produced the vectors in this store, if it is recorded."""
+        row = self.conn.execute(
+            "SELECT value FROM meta WHERE key='embed_name'").fetchone()
+        return str(row[0]) if row else None
+
+    def set_embedder(self, name: str) -> None:
+        """Record the embedder, and refuse a second one at the same width.
+
+        A width check is not enough: `hash` and `potion-base-8M` are both 256
+        dimensions, so switching between them changes the meaning of every
+        vector without changing a single number the schema can see. Two vectors
+        in one store then live in different spaces and the cosine between them
+        is noise that looks like a score.
+        """
+        if not name:
+            return
+        recorded = self.embedder_name()
+        if recorded is None:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES('embed_name', ?)",
+                (str(name),))
+            return
+        if recorded != name:
+            raise DimensionError(
+                f"this store's vectors came from {recorded!r}, and you are "
+                f"embedding with {name!r}. Both may be the same width and still "
+                f"be different spaces, so the vectors cannot be mixed. Either "
+                f"point the config at {recorded!r}, or re-embed the whole store: "
+                f"`store.clear_vectors()` then `vrusha ingest` again.")
+
     def set_vector(self, chunk_id: int, vector: np.ndarray, dtype: str = "float32") -> None:
         """Store one vector, refusing a width that does not match the store."""
         array = np.asarray(vector, dtype=np.float32).ravel()

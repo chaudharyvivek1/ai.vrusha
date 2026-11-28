@@ -47,9 +47,13 @@ than a transformer on CPU, which is the machine this project targets.
 
 ```bash
 pip install model2vec
-export VRUSHA_STORE_EMBED_BACKEND=model2vec
 vrusha harvest --query "..." --licence MIT    # vectors now mean something
 ```
+
+**model2vec is the default since wave 25.** The store records which embedder
+produced its vectors and refuses a second one at the same width — `hash` and
+`potion-base-8M` are both 256 dimensions, so the width check alone cannot tell
+two different vector spaces apart.
 
 ## Rejected, with reasons
 

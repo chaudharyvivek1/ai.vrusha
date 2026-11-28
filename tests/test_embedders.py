@@ -92,8 +92,15 @@ def test_the_aliases_resolve_to_the_same_backend(monkeypatch):
                           Model2VecEmbedder)
 
 
-def test_the_default_backend_is_still_hash():
-    """No surprise downloads: the default must stay dependency-free."""
+def test_the_default_backend_degrades_to_hash_without_the_package(monkeypatch):
+    """The default is model2vec, but a machine with no package still works.
+
+    This test used to assert that the default *was* hash. Wave 25 changed the
+    default on the evidence in docs/BENCHMARKS.md -- `bm25 + hash` scored 8%
+    recall@1, worse than bm25 alone -- so what is asserted now is the fallback,
+    which is the property that must survive the change.
+    """
+    monkeypatch.setitem(sys.modules, "model2vec", None)
     assert isinstance(get_embedder(_cfg()), HashEmbedder)
 
 
@@ -102,3 +109,61 @@ def test_the_model_name_comes_from_config(monkeypatch):
     embedder = get_embedder(_cfg(embed_backend="model2vec",
                                  embed_model_static="minishlab/potion-base-32M"))
     assert embedder.model_name == "minishlab/potion-base-32M"
+
+
+# ---------------------------------------------------------------------------
+# the store refuses to mix two embedders, even at the same width
+# ---------------------------------------------------------------------------
+
+
+def _store(tmp_path):
+    import os
+    from vrusha.config import ensure_dirs, resolve
+    from vrusha.store.db import Store
+    cfg = _cfg()
+    cfg["paths"] = dict(DEFAULTS["paths"])
+    cfg["paths"]["root"] = str(tmp_path)
+    ensure_dirs(cfg)
+    return Store(resolve(cfg, "db"))
+
+
+def test_the_default_backend_is_model2vec():
+    assert DEFAULTS["store"]["embed_backend"] == "model2vec"
+
+
+def test_a_store_records_which_embedder_made_its_vectors(tmp_path):
+    store = _store(tmp_path)
+    assert store.embedder_name() is None
+    store.set_embedder("model2vec")
+    assert store.embedder_name() == "model2vec"
+    store.set_embedder("model2vec")          # the same one twice is fine
+    store.close()
+
+
+def test_switching_embedder_at_the_same_width_is_refused(tmp_path):
+    """hash and potion-base-8M are both 256 dims: width cannot catch this."""
+    from vrusha.store.db import DimensionError
+    store = _store(tmp_path)
+    store.set_embedder("model2vec")
+    with pytest.raises(DimensionError) as error:
+        store.set_embedder("hash")
+    message = str(error.value)
+    assert "different spaces" in message
+    assert "clear_vectors" in message and "ingest" in message
+    store.close()
+
+
+def test_a_query_with_the_wrong_embedder_warns_in_the_notes(tmp_path):
+    from vrusha.store.query import retrieve
+    store = _store(tmp_path)
+    store.set_embedder("model2vec")
+    doc = store.add_document(url="https://a.test/1", title="a",
+                             text="addresses and chunks " * 40)
+    chunk = store.add_chunk(doc, "an address is a path of five numbers " * 10,
+                            kind="prose")
+    store.set_vector(chunk, HashEmbedder(256).encode_one("address"))
+    store.commit()
+
+    result = retrieve(store, HashEmbedder(256), "what is an address", _cfg())
+    assert any("different spaces" in note for note in result.notes)
+    store.close()
