@@ -51,6 +51,7 @@ def test_every_module_is_benchmarked_or_exempt_with_a_reason():
         "vrusha/store/paths.py": "paths",
         "vrusha/store/graphboost.py": "graphboost",
         "vrusha/store/compaction.py": "compaction",
+        "vrusha/store/anticipate.py": "anticipate",
     }
     exempt = benchmarks.EXEMPT
     missing = []
@@ -72,7 +73,7 @@ def test_the_registry_lists_every_benchmark_it_claims():
     names = [name for name, _function, _what in benchmarks.BENCHMARKS]
     assert names == ["blackboard", "claims", "registry", "address", "rerank",
                      "retrieval", "ingest", "extract", "serve", "index_delta",
-                     "snapshot", "entities", "edges", "communities", "paths", "graphboost", "compaction"]
+                     "snapshot", "entities", "edges", "communities", "paths", "graphboost", "compaction", "anticipate"]
     assert len(set(names)) == len(names)
 
 

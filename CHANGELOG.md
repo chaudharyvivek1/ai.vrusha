@@ -8,6 +8,34 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 54 — Part 30: anticipation, Phase 5 closed · PR #50
+
+- `vrusha/store/anticipate.py` — `predict()` (open questions, then unclaimed tasks),
+  `warm()` under a **500 ms budget** and at most **3 tasks**, `lookup()`, and a
+  bounded expiring cache (32 entries, 60 s TTL)
+- `vrusha/store/blackboard.py` — `since_of_kind()`, so a prediction does not scan
+  the whole log
+- `bench/registry.py` — `anticipate`; `docs/benchmarks/18-anticipate.md`
+- `tests/test_anticipate.py` — 12 tests
+
+**Measured:** a cache hit costs **0.8 µs** against a ~9 ms retrieval — the saving is
+the whole query and the bookkeeping is free.
+
+**Every part is capped**, because anticipation is a bet: 3 tasks, 500 ms, 32 entries,
+60 s. A test sets `budget_ms=0` and asserts nothing is warmed — the budget is a hard
+stop, not a target.
+
+**Bug:** `since_of_kind()` called `self._entry(row)` for a module-level `_row()`
+helper. The method raised, `predict()` swallowed it, and prediction silently
+returned nothing — the swallowing is deliberate (a prediction must never break a
+run) and it also hid the bug, which is the cost of that choice.
+
+**Phase 5 closed:** 7,579 tokens of run history became 1,749; a 25,000-token page
+became a pointer; the next query costs 0.8 µs instead of 9 ms when the guess was
+right.
+
+---
+
 ## Wave 53 — Part 29: offload · PR #49
 
 - `vrusha/store/compaction.py` — an entry past 20,000 tokens is appended to the
