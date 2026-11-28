@@ -59,7 +59,7 @@ Status: `[x]` done · `[~]` partly · `[ ]` not started · `[-]` deliberately sk
 | # | part | status |
 |---|---|---|
 | 22 | entity extraction from prose | `[x]` | [part-22](part-22-prose-entities.md) |
-| 23 | relation extraction with evidence | `[ ]` |
+| 23 | relation extraction with evidence | `[x]` | [part-23](part-23-relations.md) |
 | 24 | community detection | `[ ]` |
 | 25 | multi-hop expansion | `[ ]` |
 | 26 | bounded graph ranking | `[ ]` |

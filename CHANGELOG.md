@@ -8,6 +8,27 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 48 — Part 23: relations with evidence · PR #44
+
+- `vrusha/store/edges.py` — nine business predicates, each edge carrying **the
+  sentence that asserted it**, stored in `x_edges` with confidence and doc/chunk
+  id; `neighbours()` walks one hop in both directions
+- `bench/registry.py` — `edges`; `docs/benchmarks/13-edges.md`
+- `tests/test_edges.py` — 15 tests
+
+**The benchmark reports a zero, and the zero is the finding:** the documentation
+corpus produces **0 edges**, because the patterns are business relations and
+`docs/` is technical prose about a retrieval engine. A fixture corpus reports
+**5 edges, all 5 with evidence** — so the extractor works and the corpus has no
+relations in it. Reporting the zero rather than hiding it is the same rule as the
+`model2vec=0` flag.
+
+**Bug:** `Acme acquired March` — a month became the object of an acquisition,
+because `in March` matches the place-preposition rule and carried 0.7 confidence.
+Fixed with a calendar stoplist, with the reason written beside it.
+
+---
+
 ## Wave 47 — Part 22: entities from prose · PR #43
 
 Phase 4 begins. The store could read tables and not sentences.
