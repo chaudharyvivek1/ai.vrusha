@@ -19,6 +19,7 @@
     vrusha derive                 a computed column, from a checked formula
     vrusha joins                  which columns across tables are one entity
     vrusha entities               spellings of one name, across tables
+    vrusha board                  the agent blackboard: runs and entries
     vrusha math "e^{i\\pi}+1=0"   search stored formulae as formulae
     vrusha research "question"    search, fetch, extract, answer, with sources
     vrusha tools                  which engines this machine can run, and why not
@@ -1019,6 +1020,49 @@ def cmd_math(args, cfg, rules, registry) -> int:
     return 0
 
 
+def cmd_board(args, cfg, rules, registry) -> int:
+    """The blackboard: what the agents have written, in order."""
+    from .store.blackboard import Blackboard
+
+    store = _open_store(cfg)
+    board = Blackboard(store)
+    try:
+        if not args.run:
+            runs = board.runs()
+            if args.json:
+                print(json.dumps(runs, indent=2, ensure_ascii=False))
+                return 0
+            if not runs:
+                print("no runs yet: the blackboard is empty")
+                return 0
+            rows = [[item["run"], item["entries"], item["head"],
+                     item["quarantined"], item["created"][:19]] for item in runs]
+            _print_table(rows, ["run", "entries", "head", "quarantined", "created"])
+            return 0
+
+        entries = board.since(args.run, args.since, limit=args.limit,
+                              include_quarantined=args.all)
+        if args.json:
+            print(json.dumps([entry.to_dict() for entry in entries],
+                             indent=2, ensure_ascii=False, default=str))
+            return 0
+        if not entries:
+            print(f"no entries after seq {args.since} in run {args.run}")
+            return 0
+        for entry in entries:
+            flag = "!" if entry.quarantined else " "
+            print(f"{flag} {entry.seq:>5} {entry.kind:<9} {entry.agent or '-':<16} "
+                  f"{entry.summary[:80]}")
+            if entry.refs:
+                print(f"          refs: {', '.join(entry.refs[:6])}")
+            if entry.quarantined:
+                print(f"          quarantined: {entry.reason}")
+        return 0
+    finally:
+        board.close()
+        store.close()
+
+
 def cmd_entities(args, cfg, rules, registry) -> int:
     """Which spellings across tables are the same entity."""
     from .store import entities
@@ -1297,6 +1341,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--licence", default=None,
                    help="licence to assert for the fetched pages; unknown is a refusal")
     p.set_defaults(func=cmd_research)
+
+    p = sub.add_parser("board", parents=[common],
+                       help="the agent blackboard: runs and entries")
+    p.add_argument("--run", default="", help="show one run's entries")
+    p.add_argument("--since", type=int, default=0, help="only entries after this seq")
+    p.add_argument("--limit", type=int, default=200)
+    p.add_argument("--all", action="store_true", help="include quarantined entries")
+    p.set_defaults(func=cmd_board)
 
     p = sub.add_parser("entities", parents=[common],
                        help="spellings of one name, across tables")
