@@ -286,9 +286,15 @@ def build_backends(store, cfg: dict, embedder=None) -> Dict[str, Backend]:
     dimension = int(getattr(embedder, "dim", 0) or store.vector_dim() or 0)
     ragforge = block.get("ragforge", {}) or {}
 
+    from .vec0 import Vec0Backend
+
     return {
         "exact": ExactBackend(store),
         "native": NativeBackend(store, cfg),
+        # a third vector engine: same SQLite file family, no index format of its
+        # own. Brute-force in C, which is fast below a million vectors and honest
+        # about being slower above it.
+        "sqlite-vec": Vec0Backend(store, cfg),
         "ragforge": RagForgeBackend(
             url=ragforge.get("url", "http://127.0.0.1:8080"),
             timeout=float(ragforge.get("timeout", 2.0)),

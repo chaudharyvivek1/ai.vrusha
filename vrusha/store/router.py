@@ -183,6 +183,12 @@ class Router:
         # path, and flapping between two engines hides real regressions.
         candidates = [name for name, ok in
                       (("native", native_ok), ("ragforge", rag_ok)) if ok]
+        # sqlite-vec is considered only when it has been built: it is a cache,
+        # and an unbuilt cache is not a candidate
+        vec0 = self.backends.get("sqlite-vec")
+        if vec0 is not None and usable("sqlite-vec") \
+                and "sqlite-vec" not in candidates:
+            candidates.append("sqlite-vec")
         if len(candidates) == 2:
             # Exploration before exploitation. A backend that has never been
             # timed can never win on time, so it would never be tried — and the

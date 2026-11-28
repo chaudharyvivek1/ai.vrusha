@@ -612,6 +612,21 @@ def cmd_index(args, cfg, rules, registry) -> int:
     action = getattr(args, "index_action", "stats")
     store = _open_store(cfg)
     try:
+        if action == "build" and getattr(args, "engine", "native") == "sqlite-vec":
+            from .store.vec0 import Vec0Backend
+            backend = Vec0Backend(store, cfg)
+            try:
+                built = backend.build()
+            except RuntimeError as exc:
+                print(f"index: {exc}")
+                return 1
+            if args.json:
+                print(json.dumps(built, indent=2))
+            else:
+                print(f"built {built['rows']:,} vectors into a vec0 table "
+                      f"at {built['dim']} dims, {built['mb']} MB")
+                print(f"  {built['path']}")
+            return 0
         if action == "build":
             try:
                 index = ann_mod.build_for(store, cfg, verbose=not args.json)
@@ -1293,6 +1308,8 @@ def build_parser() -> argparse.ArgumentParser:
                        help="build, inspect, export or drop the vector index")
     p.add_argument("index_action", nargs="?", default="stats",
                    choices=["build", "stats", "drop", "export"])
+    p.add_argument("--engine", default="native", choices=["native", "sqlite-vec"],
+                   help="which vector index to build")
     p.add_argument("--to", default="ragforge", help="export target")
     p.add_argument("--url", default="", help="RagForge base URL to POST batches to")
     p.add_argument("--dir", default="", help="write batch JSON files here instead")
