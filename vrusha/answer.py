@@ -19,7 +19,7 @@ from typing import List, Optional
 from .generate.compose import ComposedAnswer, compose_answer, format_citations
 from .store.address import Address
 from .store.db import Store
-from .store.query import build_context, render_prompt, retrieve
+from .store.query import build_context, retrieve
 
 SYSTEM_PROMPT = (
     "You answer only from the numbered context. Cite the number after each "

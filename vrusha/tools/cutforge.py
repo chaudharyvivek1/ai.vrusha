@@ -13,7 +13,7 @@ with a whitelist like the other two.
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Optional
 
 from . import ExternalTool, ToolResult, ToolStatus, register
 

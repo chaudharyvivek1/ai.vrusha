@@ -24,11 +24,9 @@ visible before you spend a night training.
 """
 from __future__ import annotations
 
-import json
-import math
 import os
-from dataclasses import asdict, dataclass, field
-from typing import Dict, List, Optional, Tuple
+from dataclasses import asdict, dataclass
+from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn

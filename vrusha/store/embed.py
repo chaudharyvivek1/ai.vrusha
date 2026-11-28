@@ -19,7 +19,7 @@ import hashlib
 import json
 import re
 import urllib.request
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, Optional, Sequence
 
 import numpy as np
 

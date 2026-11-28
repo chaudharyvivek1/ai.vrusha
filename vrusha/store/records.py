@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Dict, List, Optional
 
 from .extract import (Record, Table, Verdict, judge, schema_of, table_from_csv,
                       tables_from_html, typed_rows)

@@ -119,3 +119,20 @@ def test_the_router_offers_it_once_it_exists(tmp_path):
     order, decision = router.plan()
     assert decision.backend in ("native", "sqlite-vec")
     store.close()
+
+
+def test_it_refuses_a_filter_instead_of_ignoring_one(tmp_path):
+    """A backend that cannot filter must not return unfiltered rows.
+
+    The router never sends a filtered query here — `filter` is a capability and
+    this backend does not declare it — but a direct caller can, and a silently
+    unfiltered answer looks exactly like a filtered one.
+    """
+    store = _store(tmp_path, chunks=20)
+    backend = build_backends(store, _cfg(tmp_path), None)["sqlite-vec"]
+    backend.build()
+    query = np.ones(32, dtype=np.float32) / np.sqrt(32)
+    with pytest.raises(RuntimeError) as error:
+        backend.search(query, 3, filter={"lang": "en"})
+    assert "cannot apply a filter" in str(error.value)
+    store.close()

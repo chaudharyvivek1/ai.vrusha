@@ -50,7 +50,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence
 
 #: Modules a script has no business importing. In namespace mode the network is

@@ -17,9 +17,7 @@ pipeline is testable without a network.
 """
 from __future__ import annotations
 
-import gzip
 import hashlib
-import io
 import json
 import os
 import re
@@ -28,17 +26,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import urllib.robotparser
-import zlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from typing import Dict, Iterable, List, Optional
 from urllib.parse import urlsplit
 
-from .charset import CharsetResult, decode, detect_charset, replacement_ratio
+from .charset import CharsetResult, decode, detect_charset
 from .net import (
     REDIRECT_CODES,
-    DecompressionError,
     NetworkError,
     RedirectError,
     ResponseTooLarge,

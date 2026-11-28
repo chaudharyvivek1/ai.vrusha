@@ -25,7 +25,7 @@ import csv
 import io
 import re
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import datetime
 from html.parser import HTMLParser
 from typing import Dict, List, Optional, Sequence, Tuple
 

@@ -28,7 +28,7 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 import numpy as np
 
 from ..store.db import Store
-from .bpe import BOS_ID, EOS_ID, Tokenizer
+from .bpe import Tokenizer
 
 
 @dataclass

@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from .config import resolve
-from .store.address import DOMAINS, Address, spread
+from .store.address import DOMAINS, spread
 from .store.db import Store
 
 

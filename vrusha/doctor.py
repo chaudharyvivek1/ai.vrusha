@@ -10,7 +10,7 @@ import platform
 import shutil
 import sqlite3
 import sys
-from typing import Dict, List
+from typing import List
 
 from . import __version__
 from .config import resolve

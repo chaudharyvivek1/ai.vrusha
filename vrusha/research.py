@@ -14,7 +14,7 @@ rather than merely cited.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from .answer import ask

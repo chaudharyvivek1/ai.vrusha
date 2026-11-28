@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Set
+from typing import List, Optional, Set
 
 #: Symbols that arrive as characters and mean something in LaTeX. A formula
 #: copied from a rendered page is mostly these.
