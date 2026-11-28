@@ -61,6 +61,20 @@ CREATE TABLE IF NOT EXISTS x_rows (
   PRIMARY KEY (table_id, row_number)
 );
 CREATE INDEX IF NOT EXISTS idx_x_rows_table ON x_rows(table_id);
+
+CREATE TABLE IF NOT EXISTS x_equations (
+  equation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  doc_id      INTEGER NOT NULL REFERENCES documents(doc_id) ON DELETE CASCADE,
+  chunk_id    INTEGER REFERENCES chunks(chunk_id) ON DELETE SET NULL,
+  latex       TEXT NOT NULL,
+  canonical   TEXT NOT NULL,
+  plain       TEXT,
+  symbols     TEXT,
+  display     INTEGER NOT NULL DEFAULT 0,
+  source      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_x_equations_doc ON x_equations(doc_id);
+CREATE INDEX IF NOT EXISTS idx_x_equations_canonical ON x_equations(canonical);
 """
 
 
@@ -257,9 +271,10 @@ def extract_document(store, doc_id: int, raw: str, source: str, *,
         else:
             stored.append(summary)
 
+    equations = store_equations(store, doc_id, raw, source=source)
     store.commit()
     return {"tables": len(stored), "rows": sum(int(s["rows"]) for s in stored),
-            "rejected": rejected, "stored": stored}
+            "rejected": rejected, "equations": equations, "stored": stored}
 
 
 def extract_path(store, path: str, *, licence: Optional[str] = None,
@@ -319,14 +334,18 @@ def extract_path(store, path: str, *, licence: Optional[str] = None,
                 rejected += 1
             else:
                 stored.append(summary)
+        equations = store_equations(store, doc_id, raw, source=path)
+    else:
+        equations = 0
     store.commit()
 
     if verbose:
         rows = sum(int(item["rows"]) for item in stored)
         print(f"  {os.path.basename(path)}: {len(stored)} table(s), {rows} row(s), "
-              f"{rejected} rejected")
+              f"{equations} formula(s), {rejected} rejected")
     return {"path": path, "doc_id": doc_id, "tables": len(stored),
             "rows": sum(int(item["rows"]) for item in stored),
+            "equations": equations,
             "rejected": rejected, "stored": stored}
 
 
@@ -349,6 +368,7 @@ def extract_dir(store, directory: str, *, licence: Optional[str] = None,
         "files": len(results),
         "tables": sum(int(r["tables"]) for r in results),
         "rows": sum(int(r["rows"]) for r in results),
+        "equations": sum(int(r.get("equations", 0)) for r in results),
         "rejected": sum(int(r.get("rejected", 0)) for r in results),
         "results": results,
     }
@@ -489,6 +509,77 @@ def apply_script(store, table_id: int, script_path: str, *, timeout: float = 5.0
     return {"ok": True, "table_id": int(table_id), "rows": len(rows),
             "origin": origin, "run": result.to_dict(),
             "columns": [{"name": key, "nulls": nulls[key]} for key in produced]}
+
+
+def store_equations(store, doc_id: int, html: str, source: str = "") -> int:
+    """Every formula on a page, canonicalised and stored against the document.
+
+    Re-extraction replaces a document's formulae rather than doubling them, for
+    the same reason the tables do: `extract` is safe to run after a re-crawl.
+    """
+    from .mathquery import extract_math
+
+    ensure_schema(store)
+    equations = extract_math(html, source=source)
+    store.conn.execute("DELETE FROM x_equations WHERE doc_id = ?", (doc_id,))
+    if not equations:
+        store.commit()
+        return 0
+    store.conn.executemany(
+        "INSERT INTO x_equations "
+        "(doc_id, chunk_id, latex, canonical, plain, symbols, display, source) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        [(int(doc_id), None, item.latex, item.canonical, item.plain,
+          json.dumps(item.symbols, ensure_ascii=False), 1 if item.display else 0,
+          source) for item in equations])
+    store.commit()
+    return len(equations)
+
+
+def search_equations(store, query: str, limit: int = 10,
+                     min_overlap: float = 0.5) -> List[Dict[str, object]]:
+    """Formulae matching a query, best first, each with its document and licence.
+
+    Exact canonical match beats a subformula, which beats a symbol overlap —
+    the order `match()` scores, so the ranking is the evidence and not a guess.
+    """
+    from .mathquery import Equation, match
+
+    ensure_schema(store)
+    rows = store.conn.execute(
+        """SELECT e.equation_id, e.latex, e.canonical, e.plain, e.symbols,
+                  e.display, d.url, d.title, d.licence, d.doc_id
+           FROM x_equations e JOIN documents d ON d.doc_id = e.doc_id""").fetchall()
+
+    hits = []
+    for row in rows:
+        equation = Equation(latex=row["latex"], canonical=row["canonical"],
+                            plain=row["plain"] or "",
+                            symbols=json.loads(row["symbols"] or "[]"),
+                            source=row["url"] or "", display=bool(row["display"]))
+        found = match(query, equation, min_overlap=min_overlap)
+        if found is None:
+            continue
+        hits.append({"equation_id": int(row["equation_id"]),
+                     "latex": row["latex"], "canonical": row["canonical"],
+                     "plain": row["plain"], "score": found.score,
+                     "kind": found.kind, "url": row["url"],
+                     "title": row["title"], "licence": row["licence"],
+                     "doc_id": int(row["doc_id"])})
+
+    hits.sort(key=lambda hit: (-float(hit["score"]), hit["equation_id"]))
+    return hits[:limit]
+
+
+def list_equations(store, limit: int = 50) -> List[Dict[str, object]]:
+    ensure_schema(store)
+    rows = store.conn.execute(
+        """SELECT e.latex, e.canonical, e.symbols, d.url, d.licence
+           FROM x_equations e JOIN documents d ON d.doc_id = e.doc_id
+           ORDER BY e.equation_id LIMIT ?""", (int(limit),)).fetchall()
+    return [{"latex": row["latex"], "canonical": row["canonical"],
+             "symbols": json.loads(row["symbols"] or "[]"),
+             "url": row["url"], "licence": row["licence"]} for row in rows]
 
 
 def list_tables(store) -> List[Dict[str, object]]:

@@ -18,6 +18,7 @@
     vrusha tables                 the extracted tables, and their schemas
     vrusha derive                 a computed column, from a checked formula
     vrusha joins                  which columns across tables are one entity
+    vrusha math "e^{i\\pi}+1=0"   search stored formulae as formulae
     vrusha verify --refetch       is what we stored still true?
     vrusha index build            the vector index: routed scan over int8
     vrusha index export           push the same chunks into RagForge
@@ -770,7 +771,8 @@ def cmd_extract(args, cfg, rules, registry) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
     else:
         print(f"\n  {result['files']} file(s), {result['tables']} table(s), "
-              f"{result['rows']} row(s), {result['rejected']} table(s) rejected")
+              f"{result['rows']} row(s), {result.get('equations', 0)} formula(s), "
+              f"{result['rejected']} table(s) rejected")
     return 0
 
 
@@ -887,6 +889,44 @@ def cmd_derive(args, cfg, rules, registry) -> int:
         guards = f"  when {'; '.join(column['guards'])}" if column["guards"] else ""
         print(f"  {column['name']:<20} = {column['expr']}{guards}")
         print(f"  {'':<20}   {column['nulls']} null(s) of {result['rows']}")
+    return 0
+
+
+def cmd_math(args, cfg, rules, registry) -> int:
+    """Search the stored formulae as formulae, with sources."""
+    from .store.records import list_equations, search_equations
+
+    store = _open_store(cfg)
+    try:
+        if not args.query:
+            equations = list_equations(store, limit=args.limit)
+            if args.json:
+                print(json.dumps(equations, indent=2, ensure_ascii=False))
+                return 0
+            if not equations:
+                print("no formulae stored: `vrusha extract --dir <path>` reads them")
+                return 0
+            for item in equations:
+                print(f"  {item['canonical'][:60]:<62} {item['url']}")
+            return 0
+        hits = search_equations(store, args.query, limit=args.limit,
+                                min_overlap=args.min_overlap)
+    finally:
+        store.close()
+
+    if args.json:
+        print(json.dumps(hits, indent=2, ensure_ascii=False))
+        return 0 if hits else 1
+    if not hits:
+        print(f"no formula matched {args.query!r}")
+        return 1
+    print(f"query: {args.query}")
+    for index, hit in enumerate(hits, start=1):
+        print(f"\n  [{index}] {hit['kind']}  score {hit['score']:.2f}")
+        print(f"      {hit['latex'][:110]}")
+        print(f"      {hit['url']}")
+        if hit.get("licence"):
+            print(f"      licence {hit['licence']}")
     return 0
 
 
@@ -1117,6 +1157,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=0, help="files to process")
     p.add_argument("--mdy", action="store_true", help="month-first dates (US corpora)")
     p.set_defaults(func=cmd_extract)
+
+    p = sub.add_parser("math", parents=[common],
+                       help="search stored formulae as formulae")
+    p.add_argument("query", nargs="?", default="")
+    p.add_argument("--limit", type=int, default=10)
+    p.add_argument("--min-overlap", type=float, default=0.5)
+    p.set_defaults(func=cmd_math)
 
     p = sub.add_parser("joins", parents=[common],
                        help="which columns across tables are the same entity")
