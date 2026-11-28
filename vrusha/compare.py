@@ -115,3 +115,104 @@ def render(result: Comparison) -> str:
         f"board entries: {result.board_entries}    tasks: {result.tasks}",
     ]
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Option 3: a multi-step goal
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class MultiStep:
+    """A goal where step 2 needs step 1's output.
+
+    `docs/PLAN-V3.md` Part 35 measured the hierarchy's **cost** (42 board entries,
+    identical quality) but never its **benefit**, because documentation has no
+    second step. This does: research three companies, then compare them, and the
+    comparison can only use what the research produced.
+    """
+
+    companies: List[str] = field(default_factory=list)
+    single_seconds: float = 0.0
+    orchestrated_seconds: float = 0.0
+    single_facts: int = 0
+    orchestrated_facts: int = 0
+    board_entries: int = 0
+    tasks: int = 0
+    orchestrated_context: int = 0     # characters the compare step was given
+    single_context: int = 0
+
+    def to_dict(self) -> dict:
+        return {"companies": len(self.companies),
+                "single_seconds": round(self.single_seconds, 2),
+                "orchestrated_seconds": round(self.orchestrated_seconds, 2),
+                "single_facts": self.single_facts,
+                "orchestrated_facts": self.orchestrated_facts,
+                "board_entries": self.board_entries,
+                "tasks": self.tasks,
+                "single_context": self.single_context,
+                "orchestrated_context": self.orchestrated_context}
+
+
+def multistep(store, embedder, cfg: dict, board, claims, registry,
+              companies: Sequence[str], *, workers: int = 3,
+              run_id: str = "multistep") -> MultiStep:
+    """Research N companies, then compare them -- both ways."""
+    from . import orchestrator as orch
+    from .store.query import retrieve
+
+    companies = list(companies)
+    result = MultiStep(companies=companies)
+
+    def research(name: str, top_k: int = 3, on=None) -> str:
+        # `on` is the thread's own connection: a SQLite connection is bound to the
+        # thread that made it, so a worker must never reuse the caller's store
+        found = retrieve(on or store, embedder, f"{name} business", cfg, top_k=top_k)
+        return "\n".join(hit.text for hit in found.hits)
+
+    # 1. one agent: every company's raw text goes into one context, then compare
+    started = time.perf_counter()
+    single_chunks = [research(name) for name in companies]
+    single_context = "\n".join(single_chunks)
+    result.single_context = len(single_context)
+    result.single_facts = sum(1 for name in companies
+                              if name.split()[0].lower() in single_context.lower())
+    result.single_seconds = time.perf_counter() - started
+
+    # 2. the hierarchy: one task per company, then a compare task that may only
+    #    use the findings the research tasks left on the board
+    started = time.perf_counter()
+
+    def worker(task: str, wstore=None) -> str:
+        if task.startswith("compare"):
+            # step 2 reads step 1's output -- this is the whole point
+            findings = [entry.summary for entry in board.since(run_id, 0, limit=200)
+                        if entry.kind == "finding"]
+            result.orchestrated_context = sum(len(text) for text in findings)
+            mentioned = sum(1 for name in companies
+                            if name.split()[0].lower()
+                            in " ".join(findings).lower())
+            return f"compared {mentioned} of {len(companies)} companies"
+        # the finding carries the entity name, so the metric compares like with
+        # like: the single run counts names in 22,970 characters of raw text, and
+        # this counts names in a finding that *says* which company it is about
+        return f"{task.removeprefix('research ')}: " + research(
+            task.removeprefix("research "), on=wstore)[:300]
+
+    # Two stages, because the compare task needs the research to exist first.
+    # A flat `run_pool` raced them and the compare task read an empty board.
+    run_result = orch.run_stages(
+        store, board, claims, registry, cfg, "research and compare",
+        stages=[[f"research {name}" for name in companies],
+                ["compare the findings"]],
+        worker=worker, workers=workers, run_id=run_id,
+        store_factory=getattr(store, "_factory", None))
+    result.orchestrated_seconds = time.perf_counter() - started
+    result.tasks = len(run_result.tasks)
+    result.board_entries = run_result.entries
+    result.orchestrated_facts = sum(
+        1 for name in companies
+        if name.split()[0].lower() in " ".join(
+            entry.summary for entry in board.since(run_id, 0, limit=200)
+            if entry.kind == "finding").lower())
+    return result

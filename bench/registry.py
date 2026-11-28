@@ -984,6 +984,51 @@ def bench_graph_real() -> Dict[str, float]:
             "duplicates_merged": duplicates, "hops": hops}
 
 
+def bench_multistep() -> Dict[str, float]:
+    """Research three companies, then compare -- one agent against the hierarchy."""
+    from vrusha import compare
+    from vrusha.config import DEFAULTS, ensure_dirs, resolve
+    from vrusha.harvest.fetch import Document
+    from vrusha.ingest import ingest_documents
+    from vrusha.languages import load_registry
+    from vrusha.rules import load_rules
+    from vrusha.store.blackboard import Blackboard
+    from vrusha.store.claims import Claims
+    from vrusha.store.db import Store
+    from vrusha.store.embed import get_embedder
+    from vrusha.store.registry import Registry
+
+    cfg = {key: (dict(value) if isinstance(value, dict) else value)
+           for key, value in DEFAULTS.items()}
+    cfg["paths"] = dict(DEFAULTS["paths"])
+    cfg["paths"]["root"] = tempfile.mkdtemp()
+    ensure_dirs(cfg)
+    path = resolve(cfg, "db")
+    store = Store(path)
+    folder = os.path.join(ROOT, "examples", "corpora", "wiki-companies")
+    documents = []
+    for name in sorted(os.listdir(folder)):
+        with open(os.path.join(folder, name), encoding="utf-8") as handle:
+            documents.append(Document(url=f"file://{name}", title=name[:-4],
+                                      status=200, text=handle.read()))
+    embedder = get_embedder(cfg)
+    ingest_documents(documents, store, cfg, load_rules(), load_registry(),
+                     embedder, licence="CC-BY-SA", verbose=False)
+    store._factory = lambda: Store(path)
+    board = Blackboard(store)
+    result = compare.multistep(store, embedder, cfg, board, Claims(board),
+                               Registry(board), ["Infosys", "Wipro", "HCL"],
+                               run_id="bench-multistep")
+    store.close()
+    return {"single_facts": float(result.single_facts),
+            "orchestrated_facts": float(result.orchestrated_facts),
+            "single_context": float(result.single_context),
+            "orchestrated_context": float(result.orchestrated_context),
+            "single_s": result.single_seconds,
+            "orchestrated_s": result.orchestrated_seconds,
+            "board_entries": float(result.board_entries)}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -1014,6 +1059,7 @@ BENCHMARKS: List[tuple] = [
     ("safety", bench_safety, "scanning a page for instructions"),
     ("fuzz", bench_fuzz, "rubbish through the parsers, and whether it crashes"),
     ("graph_real", bench_graph_real, "the graph parts on a corpus with relations"),
+    ("multistep", bench_multistep, "research three companies, then compare"),
 ]
 
 
