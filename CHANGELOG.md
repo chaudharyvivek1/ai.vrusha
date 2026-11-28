@@ -8,6 +8,35 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 32 — the master plan · PR #28
+
+The audit, the state of the field, and the agent design, merged into one plan.
+
+- `docs/MASTER-PLAN.md` — the benchmark landscape, the context-management
+  primitives, a **70-skill inventory**, old plan vs new evidence, and six phases
+- `docs/PROGRAM.md`, `README.md` — pointers
+
+**What the research changed.** The public agent benchmarks are saturated
+(OSWorld-Verified 90.19% against a 72.36% human baseline; GAIA 94.0% against 92%)
+or contaminated (SWE-bench Verified was withdrawn by OpenAI in February 2026 after
+an audit found 59.4% of audited problems had flawed tests and every frontier model
+could reproduce gold patches). The frontier moved to long horizons — OSWorld 2.0
+sits at 20.6% — and to cost. So this project will not adopt an external benchmark;
+phase 5 builds a long-horizon task set of its own and reports cost per completed
+task.
+
+**What the inventory changed.** 70 skills: **26 built, 14 partial, 30 gaps**. The
+gaps are not where the old plan assumed — extraction is complete, and the holes are
+documents/office (8 of 8 missing), media, and agent infrastructure. So documents and
+**context compaction** now come before orchestration: 64 agents with no compaction
+is 64 agents that each run out of window.
+
+**Two numbers adopted from the field rather than invented:** offload a tool result
+to storage past 20,000 tokens, and compact at ~85% of the window. Both now have a
+home in phase 2.
+
+---
+
 ## Wave 31 — second audit of the whole package · PR #27
 
 Run before designing the next phase: static analysis, every command by hand on a

@@ -255,6 +255,7 @@ endpoint.
 | `backends` | which engines are usable, how fast each has been — see [docs/BACKENDS.md](docs/BACKENDS.md) |
 | `serve` | one JSON API, either engine behind it — see [docs/SERVE.md](docs/SERVE.md) |
 | — | the plan for many agents at once: [docs/AGENTS.md](docs/AGENTS.md) |
+| — | **the forward plan**: [docs/MASTER-PLAN.md](docs/MASTER-PLAN.md) |
 | `report` | one page |
 
 Every command takes `--json`, `--root` and `--config`.

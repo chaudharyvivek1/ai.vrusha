@@ -119,6 +119,13 @@ is how a repo becomes unbuildable in a year.
 
 ---
 
+## The plan after this one
+
+`docs/MASTER-PLAN.md` supersedes both documents below as the forward plan: it adds
+the state of the field (which benchmarks are saturated or contaminated), a
+70-skill inventory with what exists and what does not, and a six-phase plan that
+puts documents and compaction *before* orchestration.
+
 ## Next programme: the agent fabric
 
 The six parts above are done. The next plan is `docs/AGENTS.md` — four levels of
