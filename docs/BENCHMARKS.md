@@ -480,6 +480,46 @@ A regression test guards the shape, not the speed: `retrieve()` must issue
 **one** hydration statement, because the failure mode here is a silent slowdown
 with correct answers.
 
+## The benchmark list: every work, measured
+
+`bench/registry.py` holds one benchmark per subsystem, and
+`python -m bench.registry` runs them all in one table:
+
+```
+benchmark     seconds  numbers
+blackboard       4.62  append_ms=1.32, delta_read_ms=1.70, replay_ms=71.37, entries=2020
+claims           0.08  claim_ms=0.40, summary_ms=0.13
+registry         0.21  register_ms=1.24, heartbeat_ms=0.39, sweep_ms=0.13, live=64.00
+address          0.50  warm_ms=0.40, rows=2000.00
+rerank           0.04  noop_ms=0.00, lexical_ms=1.98, candidates=20.00
+retrieval        5.31  query_ms=12.38, recall@5=0.70, ndcg@10=0.58, questions=40
+ingest           2.47  docs_per_second=12.07, chunks=253.00, ms_per_doc=82.87
+extract          0.19  files_per_second=52.30, tables=4.00, ms_per_file=19.12
+serve            0.73  request_ms=3.63, max_ms=34.71
+```
+
+**The rule is enforced, not intended.** `tests/test_benchmarks.py` walks
+`vrusha/` and fails CI when a module has neither a benchmark nor a written reason
+in `EXEMPT`. The first run found **39 modules with no benchmark** — nine are now
+measured directly, and the rest carry a sentence explaining why a benchmark would
+measure the wrong thing ("network-bound; a local benchmark would measure the
+loopback, not the web").
+
+A benchmark nobody can run is a paragraph. This one is a command.
+
+## The reranker, measured against its own absence
+
+| alpha | recall@1 | recall@5 | nDCG@10 | passage@5 | ms |
+|---|---|---|---|---|---|
+| none | 35.0% | 70.0% | 0.576 | **45.0%** | 29 |
+| 0.3 (opt-in) | 35.0% | **72.5%** | **0.611** | 42.5% | 55 |
+| 0.7 | 40.0% | 70.0% | 0.619 | 27.5% | 89 |
+
+**Document ranking improves; passage ranking degrades monotonically.** The
+reranker puts the right file higher and the right paragraph lower, because a
+document-level signal cannot tell one paragraph from another inside the same file.
+The default stays `none`; `rerank.backend: lexical` opts in.
+
 ## Reproducing this
 
 ```bash

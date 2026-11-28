@@ -8,6 +8,33 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 41 — Parts 15 and 17: the lexical reranker, and every work benchmarked · PR #37
+
+- `vrusha/rerank.py` — a field-weighted BM25 reranker: no model, no dependency,
+  ~2 ms for twenty candidates, `alpha` swept rather than guessed
+- `bench/registry.py` — **one benchmark per subsystem**, runnable as a table
+- `tests/test_benchmarks.py` — fails CI when a module has neither a benchmark nor
+  a written reason to be exempt
+- `docs/work/part-15-lexical-rerank.md`, `docs/BENCHMARKS.md`
+
+**The measurement:** at `alpha=0.3` nDCG@10 rises 0.576 → **0.611** and recall@5
+70% → **72.5%**, while **passage@5 falls 45% → 42.5%** and latency doubles
+(29 → 55 ms). Document ranking improves, passage ranking degrades — monotonically,
+up to −22.5 points at alpha 1.0 — because a document-level signal cannot tell one
+paragraph from another inside the same file.
+
+**A hypothesis tested and disproved:** the loss is not title bias. Weighting the
+title 1×, 2× or 3× gives the same nDCG to three decimals. Alpha is the only lever.
+
+**The decision:** opt-in at 0.3, default `none`. A +3.5-point gain for 2× latency
+and a small passage loss is worth having when asked for, not by default.
+
+**The benchmark rule, enforced:** the coverage test found **39 modules with no
+benchmark** on its first run. Nine are now measured; the rest carry a sentence
+explaining why a benchmark would measure the wrong thing.
+
+---
+
 ## Wave 40 — Part 14: the reranker seam · PR #36
 
 Phase 2 begins. A seam, not a reranker: a protocol, a no-op default, a registry,
