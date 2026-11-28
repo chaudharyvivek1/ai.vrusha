@@ -41,9 +41,9 @@ Status: `[x]` done · `[~]` partly · `[ ]` not started · `[-]` deliberately sk
 | # | part | status |
 |---|---|---|
 | 14 | the reranker seam | `[x]` | [part-14](part-14-rerank-seam.md) |
-| 15 | a lexical reranker (no model) | `[ ]` |
+| 15 | a lexical reranker (no model) | `[x]` | [part-15](part-15-lexical-rerank.md) |
 | 16 | an optional cross-encoder (ONNX) | `[ ]` |
-| 17 | the honest comparison, and the decision | `[ ]` |
+| 17 | the honest comparison, and the decision | `[~]` | [part-15](part-15-lexical-rerank.md) — decided early; Part 16 may reopen it |
 
 ### Phase 3 — incremental indexing
 
@@ -137,3 +137,22 @@ look".
 | before Part 2 | packaging | the new `eval_sets/` directory was missing from `package-data`, so the set would not have shipped |
 | before Part 4 | `ruff`, the set loader, a full `evaluate` run | nothing — clean |
 | before Part 14 | `ruff`, the 40-question run, the set loader | nothing — clean |
+| before Part 15 | `ruff`, the 40-question run, the benchmark inventory | 39 modules had no benchmark — now measured or exempted with a reason |
+
+## The benchmark list
+
+`bench/registry.py` holds every benchmark, and `python -m bench.registry` runs
+them all. `tests/test_benchmarks.py` fails CI when a module has neither a
+benchmark nor a written reason.
+
+| benchmark | what it measures |
+|---|---|
+| blackboard | append, delta read, replay |
+| claims | claim arbitration and summary |
+| registry | register, heartbeat, sweep at 64 slots |
+| address | the address ranking, warm |
+| rerank | the second stage over 20 candidates |
+| retrieval | a whole query, and its quality |
+| ingest | documents to chunks and vectors |
+| extract | fixtures to typed tables |
+| serve | one request through the JSON API |
