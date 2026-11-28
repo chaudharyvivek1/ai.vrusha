@@ -51,7 +51,7 @@ Status: `[x]` done · `[~]` partly · `[ ]` not started · `[-]` deliberately sk
 |---|---|---|
 | 18 | delta segments | `[x]` | [part-18](part-18-delta-index.md) — **24× faster than a rebuild** |
 | 19 | upsert and delete | `[x]` | [part-19](part-19-upsert-delete.md) |
-| 20 | background compaction | `[ ]` |
+| 20 | background compaction | `[x]` | [part-20](part-20-compaction.md) |
 | 21 | versioned snapshots | `[ ]` |
 
 ### Phase 4 — graph
@@ -141,6 +141,7 @@ look".
 | before Part 16 | `ruff`, the 40-question run | the reranker was handed all 60 candidates, not the top of the list |
 | before Part 18 | `ruff`, the 40-question run, the benchmark table | nothing — clean |
 | before Part 19 | `ruff`, the delta tests | nothing — clean; the bugs came *from* Part 19's own tests |
+| before Part 20 | the full benchmark run | **`retrieval` did not record its embedder** — recall@5 read 0.47 (hash fallback) where model2vec gives 0.70 |
 
 ## The benchmark list
 

@@ -242,9 +242,13 @@ def bench_retrieval() -> Dict[str, float]:
     outcomes = evaluate.run(store, embedder, cfg, items, rerank_off=True)
     summary = evaluate.summarise(outcomes)
     store.close()
+    # The embedder is part of the measurement. Without it the same benchmark
+    # reads 0.70 recall@5 with model2vec and 0.47 with the hash fallback, and
+    # nothing in the output says which -- a number without a method.
     return {"query_ms": summary["seconds"] * 1000.0,
             "recall@5": summary["recall@5"], "ndcg@10": summary["ndcg@10"],
-            "questions": float(summary["questions"])}
+            "questions": float(summary["questions"]),
+            "model2vec": 1.0 if getattr(embedder, "name", "") == "model2vec" else 0.0}
 
 
 def bench_ingest() -> Dict[str, float]:
@@ -419,6 +423,10 @@ def bench_index_delta() -> Dict[str, float]:
     delta_mod.delete(store, index_dir, new_ids[50:60])
     delete_ms = (time.perf_counter() - started) * 1000.0
 
+    started = time.perf_counter()
+    compacted = delta_mod.safe_compact(store, index_dir, cfg)
+    compact_ms = (time.perf_counter() - started) * 1000.0
+
     query = rng.normal(size=dim).astype(np.float32)
     query /= np.linalg.norm(query)
     search_ms = _timeit(lambda: delta_mod.search(index_dir, query, 10,
@@ -427,8 +435,10 @@ def bench_index_delta() -> Dict[str, float]:
     store.close()
     return {"rebuild_ms": rebuild_ms, "append_ms": append_ms,
             "upsert_ms": upsert_ms, "delete_ms": delete_ms,
+            "compact_ms": compact_ms,
             "ratio": rebuild_ms / max(1e-9, append_ms),
-            "search_ms": search_ms, "new_vectors": 200.0}
+            "search_ms": search_ms, "new_vectors": 200.0,
+            "compacted": 1.0 if compacted.get("compacted") else 0.0}
 
 
 BENCHMARKS: List[tuple] = [

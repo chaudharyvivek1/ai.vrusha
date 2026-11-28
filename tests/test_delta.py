@@ -5,6 +5,7 @@ vectors are findable (correctness), and the base files are not touched (cost).
 """
 import os
 import sys
+import time
 
 import numpy as np
 import pytest
@@ -277,4 +278,89 @@ def test_the_merged_search_still_matches_the_store_after_edits(tmp_path):
         truth = [int(ids[i]) for i in np.argsort(-scores)]
         assert 8 not in hits
         assert hits <= set(truth)
+    store.close()
+
+
+# ---------------------------------------------------------------------------
+# Part 20: compaction, safely
+# ---------------------------------------------------------------------------
+
+
+def test_maybe_compact_does_nothing_below_the_threshold(tmp_path):
+    store, cfg, index_dir, built, doc = _setup(tmp_path)
+    delta.append(store, index_dir, _add(store, doc, 5))
+    result = delta.maybe_compact(store, index_dir, cfg)
+    assert result["compacted"] is False
+    assert "threshold" in result["reason"]
+    store.close()
+
+
+def test_safe_compaction_swaps_in_a_new_base(tmp_path):
+    store, cfg, index_dir, built, doc = _setup(tmp_path)
+    delta.append(store, index_dir, _add(store, doc, 20))
+    result = delta.safe_compact(store, index_dir, cfg)
+    assert result["compacted"] is True
+    assert result["segments_removed"] == 1
+    assert delta.stats(index_dir)["segments"] == 0
+    rebuilt = ann_mod.AnnIndex.load(index_dir)
+    assert rebuilt is not None and rebuilt.rows == 120
+    store.close()
+
+
+def test_two_compactions_cannot_race(tmp_path):
+    """A lock file, and a second compactor that says so instead of racing."""
+    store, cfg, index_dir, built, doc = _setup(tmp_path)
+    lock = os.path.join(index_dir, delta.LOCK_FILE)
+    with open(lock, "w", encoding="utf-8") as handle:
+        handle.write("99999 0")
+    result = delta.safe_compact(store, index_dir, cfg)
+    assert result["compacted"] is False
+    assert "another compaction" in result["reason"]
+    os.unlink(lock)
+    store.close()
+
+
+def test_a_stale_lock_is_broken_not_waited_on(tmp_path):
+    """A lock nobody releases is an outage, not a safety feature."""
+    store, cfg, index_dir, built, doc = _setup(tmp_path)
+    delta.append(store, index_dir, _add(store, doc, 10))
+    lock = os.path.join(index_dir, delta.LOCK_FILE)
+    with open(lock, "w", encoding="utf-8") as handle:
+        handle.write("99999 0")
+    old = time.time() - 5000
+    os.utime(lock, (old, old))
+    result = delta.safe_compact(store, index_dir, cfg, stale_lock_s=60)
+    assert result["compacted"] is True, "a 5,000-second-old lock was honoured"
+    assert not os.path.exists(lock), "the lock was not released"
+    store.close()
+
+
+def test_the_lock_is_released_even_when_building_fails(tmp_path):
+    store, cfg, index_dir, built, doc = _setup(tmp_path)
+
+    class Broken:
+        rows = 0
+
+        def save(self, directory):
+            raise RuntimeError("disk full")
+
+    original = ann_mod.AnnIndex.build
+    ann_mod.AnnIndex.build = classmethod(lambda cls, *a, **k: Broken())
+    try:
+        with pytest.raises(RuntimeError):
+            delta.safe_compact(store, index_dir, cfg)
+    finally:
+        ann_mod.AnnIndex.build = original
+    assert not os.path.exists(os.path.join(index_dir, delta.LOCK_FILE))
+    store.close()
+
+
+def test_a_query_still_answers_after_a_compaction(tmp_path):
+    store, cfg, index_dir, built, doc = _setup(tmp_path)
+    delta.append(store, index_dir, _add(store, doc, 15))
+    delta.safe_compact(store, index_dir, cfg)
+    query = np.ones(DIM, dtype=np.float32) / np.sqrt(DIM)
+    hits = delta.search(index_dir, query, 3, base=ann_mod.AnnIndex.load(index_dir),
+                        store=store)
+    assert len(hits) == 3
     store.close()
