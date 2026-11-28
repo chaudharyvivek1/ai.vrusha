@@ -8,6 +8,31 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 68 — a bare corporate suffix is not a name · PR #65
+
+- `vrusha/store/prose.py` — a one-word run that is a bare corporate suffix is
+  skipped, instead of being emitted as a **0.9-confidence organisation**
+- `tests/test_prose.py` — 3 more tests
+
+**The bug:** the classifier gave 0.9 confidence to any single word in `ORG_SUFFIXES`
+— the list meant to recognise `... Pvt Ltd` at the *end* of a name. A sentence
+starting with `Technologies` produced a high-confidence organisation, and the graph
+got a node that is not a company.
+
+**Two symptoms, one cause:** wave 66's resolver refused to merge `Technologies` into
+`Alpha Design Technologies Pvt Ltd` (45.3 against a 90 threshold) — and it was right;
+the extractor was wrong to emit the fragment.
+
+**Measured:** 8 bare-suffix entities → **0**; nodes 157 → **155**; edges 124 → **121**.
+The three lost edges were attached to fake nodes — **a graph that loses edges when a
+fake node disappears is getting more correct.**
+
+**Exposed and not fixed:** a run can cross a sentence boundary when the source text
+truncates a word (`Andhra Prade Bharat Petroleum Corporation`), because the
+sentence-break check looks for punctuation and a truncated word has none.
+
+---
+
 ## Wave 67 — the graph boost, on a corpus that has a graph · PR #64
 
 - `vrusha/store/graphboost.py` — `_query_communities` matches a query entity against

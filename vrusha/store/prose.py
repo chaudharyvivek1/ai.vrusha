@@ -113,6 +113,16 @@ def extract(text: str) -> List[Entity]:
             cursor += 1
 
         run_lower = [part.lower() for part in run]
+
+        # A bare suffix is not a name. `Technologies`, `Limited`, `Services` on
+        # their own were classified as **0.9-confidence organisations** because the
+        # suffix list matched, and they became graph nodes of their own -- found on
+        # a real corpus, where `Technologies` appeared as a subject next to
+        # `Alpha Design Technologies Pvt Ltd`. A fragment is not an entity.
+        if len(run) == 1 and run_lower[0] in ORG_SUFFIXES:
+            index = cursor
+            continue
+
         at_start = _sentence_start(text, run_start)
         previous = _clean(tokens[index - 1][0]).lower() if index else ""
 

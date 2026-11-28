@@ -102,3 +102,37 @@ def test_by_kind_counts_them():
         "Acme Corporation met Beta Limited in Pune."))
     assert counts.get("organisation") == 2
     assert counts.get("place") == 1
+
+
+# ---------------------------------------------------------------------------
+# a bare corporate suffix is not a name
+# ---------------------------------------------------------------------------
+
+
+def test_a_bare_suffix_is_not_an_organisation():
+    """`Technologies` alone was a 0.9-confidence organisation -- found on a real
+    corpus, where it became a graph node next to `Alpha Design Technologies Pvt
+    Ltd`. A fragment is not an entity."""
+    from vrusha.store import prose as module
+
+    for word in ("Technologies", "Limited", "Services", "Systems", "Industries"):
+        found = [entity for entity in module.extract(f"{word} is mentioned here.")
+                 if entity.text.lower() == word.lower()]
+        assert not found, f"{word} was emitted as an entity"
+
+
+def test_a_real_organisation_still_is():
+    from vrusha.store import prose as module
+
+    found = module.extract("Infosys Technologies Limited reported results.")
+    texts = [entity.text.lower() for entity in found]
+    assert any("infosys" in text for text in texts), texts
+
+
+def test_the_suffix_rule_still_fires_inside_a_name():
+    from vrusha.store import prose as module
+
+    found = module.extract("We met Alpha Design Technologies Pvt Ltd today.")
+    organisations = [entity for entity in found if entity.kind == "organisation"]
+    assert organisations, "a multi-word name with a suffix lost its kind"
+    assert all(len(entity.text.split()) > 1 for entity in organisations)
