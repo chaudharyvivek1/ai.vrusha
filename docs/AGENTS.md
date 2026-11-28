@@ -281,7 +281,7 @@ replaying the log rebuilds the same state.
 expired lease is reclaimed by a second agent; a task is never claimed twice while
 its lease is live.
 
-### Step 3 — the registry
+### Step 3 — the registry *(done, wave 35 — `docs/BOARD.md`)*
 64 slots, each with a skill bucket, a state, and a live/dead heartbeat.
 
 **Done means:** `GET /agents` shows 64 slots; a killed agent's slot goes `dead`

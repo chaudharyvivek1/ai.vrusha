@@ -21,6 +21,7 @@
     vrusha entities               spellings of one name, across tables
     vrusha board                  the agent blackboard: runs and entries
     vrusha claims                 who holds which task, and for how much longer
+    vrusha agents                 the 64 slots: live, dead, free, and their skills
     vrusha math "e^{i\\pi}+1=0"   search stored formulae as formulae
     vrusha research "question"    search, fetch, extract, answer, with sources
     vrusha tools                  which engines this machine can run, and why not
@@ -1064,6 +1065,62 @@ def cmd_board(args, cfg, rules, registry) -> int:
         store.close()
 
 
+def cmd_agents(args, cfg, rules, registry) -> int:
+    """The 64 slots: who is live, what skill they carry, when they last beat."""
+    from .store.blackboard import Blackboard
+    from .store.registry import Registry
+
+    store = _open_store(cfg)
+    board = Blackboard(store)
+    agents = Registry(board)
+    try:
+        if not args.run:
+            runs = board.runs()
+            if args.json:
+                print(json.dumps(runs, indent=2, ensure_ascii=False))
+                return 0
+            if not runs:
+                print("no runs yet: `vrusha agents --run <id>` after an agent registers")
+                return 0
+            _print_table([[item["run"], item["entries"], item["head"]]
+                          for item in runs], ["run", "entries", "head"])
+            return 0
+        if args.sweep:
+            dead = agents.sweep(args.run, stale_after=args.stale_after)
+            if not args.json and dead:
+                print(f"  {len(dead)} agent(s) went dead: {', '.join(dead[:6])}")
+        slots = agents.slots(args.run)
+        summary = agents.summary(args.run)
+        if args.json:
+            print(json.dumps({"summary": summary,
+                              "by_skill": agents.by_skill(args.run),
+                              "slots": [slot.to_dict() for slot in slots]},
+                             indent=2, ensure_ascii=False, default=str))
+            return 0
+        live = [slot for slot in slots if slot.state != "free"]
+        if not live:
+            print(f"no agents registered in run {args.run} "
+                  f"({summary['free']} slots free of {summary['capacity']})")
+            return 0
+        import time as _time
+        table = []
+        for slot in live:
+            age = max(0.0, _time.time() - slot.heartbeat_at) if slot.heartbeat_at else 0
+            table.append([slot.slot, slot.state, slot.agent, slot.level or "-",
+                          slot.skill or "-", f"{age:.0f}s"])
+        _print_table(table, ["slot", "state", "agent", "level", "skill", "beat"])
+        print(f"\n  {summary['live']} live, {summary['dead']} dead, "
+              f"{summary['free']} free of {summary['capacity']}")
+        skills = agents.by_skill(args.run)
+        if skills:
+            print("  live by skill: " + ", ".join(
+                f"{name}×{count}" for name, count in skills.items()))
+        return 0
+    finally:
+        board.close()
+        store.close()
+
+
 def cmd_claims(args, cfg, rules, registry) -> int:
     """Who holds which task, and for how much longer."""
     from .store.blackboard import Blackboard
@@ -1399,6 +1456,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=200)
     p.add_argument("--all", action="store_true", help="include quarantined entries")
     p.set_defaults(func=cmd_board)
+
+    p = sub.add_parser("agents", parents=[common],
+                       help="the 64 agent slots: live, dead, free, and their skills")
+    p.add_argument("--run", default="")
+    p.add_argument("--sweep", action="store_true",
+                   help="mark agents dead whose heartbeat is too old")
+    p.add_argument("--stale-after", type=float, default=90.0)
+    p.set_defaults(func=cmd_agents)
 
     p = sub.add_parser("claims", parents=[common],
                        help="who holds which task, and for how much longer")

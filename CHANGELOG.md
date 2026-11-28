@@ -8,6 +8,34 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 35 — the 64-slot registry, and the documentation indexed · PR #31
+
+Step 3 of `docs/AGENTS.md`, plus the documentation made navigable.
+
+- `vrusha/store/registry.py` — 64 pre-created slots per run, allocation in one
+  atomic `UPDATE … RETURNING`, heartbeats, a sweep for agents that stopped
+  beating, and a cap that **refuses** the 65th agent
+- `vrusha agents --run X [--sweep] [--stale-after]`
+- `docs/README.md` — every document, indexed by what it answers
+- `docs/BOARD.md` — the registry section; `tests/test_registry.py` — 17 tests
+
+**The cap is the point:** a limit that lives in a document is a limit that does
+not exist. The 65th registration is refused with the count in the reason.
+
+**The audit found nothing in the module** — not because it is simpler, but
+because the lesson from waves 33 and 34 was applied before writing it: every
+method holds the lock across the statement *and* the read that follows it. The
+thread and process tests passed first time. The only fix was one long line.
+
+**The audit did find something in the tests.** Eight `DeprecationWarning`s:
+`fork()` from a multi-threaded process "may lead to deadlocks in the child" —
+a lock another thread held at the moment of the fork is duplicated into the
+child and never released. All three process tests now use `spawn`, which also
+stops them inheriting a parent connection — the bug that made the blackboard's
+multi-process test pass alone and fail in the suite.
+
+---
+
 ## Wave 34 — claims and leases · PR #30
 
 Step 2 of `docs/AGENTS.md`: one agent per task, and a lease so a dead agent lets

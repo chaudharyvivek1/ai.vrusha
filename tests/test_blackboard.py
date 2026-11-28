@@ -235,7 +235,8 @@ def test_a_thousand_appends_from_processes_lose_nothing(tmp_path):
     store.close()
 
     writers, per_writer = 4, 250
-    context = multiprocessing.get_context("fork")
+    # `spawn`, not `fork` -- see the note in test_claims.py
+    context = multiprocessing.get_context("spawn")
     barrier = context.Barrier(writers)
     processes = [context.Process(target=_process_writer,
                                  args=(path, n, per_writer, barrier))
