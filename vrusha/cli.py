@@ -18,6 +18,7 @@
     vrusha tables                 the extracted tables, and their schemas
     vrusha derive                 a computed column, from a checked formula
     vrusha joins                  which columns across tables are one entity
+    vrusha entities               spellings of one name, across tables
     vrusha math "e^{i\\pi}+1=0"   search stored formulae as formulae
     vrusha research "question"    search, fetch, extract, answer, with sources
     vrusha tools                  which engines this machine can run, and why not
@@ -1018,6 +1019,37 @@ def cmd_math(args, cfg, rules, registry) -> int:
     return 0
 
 
+def cmd_entities(args, cfg, rules, registry) -> int:
+    """Which spellings across tables are the same entity."""
+    from .store import entities
+
+    store = _open_store(cfg)
+    try:
+        if args.build:
+            result = entities.build(store, threshold=args.threshold)
+            if args.json:
+                print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            else:
+                print(f"  {result['entities']} entity group(s), "
+                      f"{result['aliases']} alias(es), threshold {result['threshold']:.0f}")
+            return 0
+        groups = entities.list_entities(store)
+    finally:
+        store.close()
+
+    if args.json:
+        print(json.dumps(groups, indent=2, ensure_ascii=False))
+        return 0
+    if not groups:
+        print("no entity groups yet: `vrusha entities --build` resolves them")
+        return 0
+    for group in groups:
+        print(f"\n  {group['canonical']}  ({group['size']} spellings)")
+        for alias in group["aliases"]:
+            print(f"    {alias['score']:>5.0f}  {alias['alias']}")
+    return 0
+
+
 def cmd_joins(args, cfg, rules, registry) -> int:
     """Which columns across tables are the same entity, and how sure we are."""
     from .store import relations
@@ -1265,6 +1297,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--licence", default=None,
                    help="licence to assert for the fetched pages; unknown is a refusal")
     p.set_defaults(func=cmd_research)
+
+    p = sub.add_parser("entities", parents=[common],
+                       help="spellings of one name, across tables")
+    p.add_argument("--build", action="store_true")
+    p.add_argument("--threshold", type=float, default=90.0)
+    p.set_defaults(func=cmd_entities)
 
     p = sub.add_parser("math", parents=[common],
                        help="search stored formulae as formulae")

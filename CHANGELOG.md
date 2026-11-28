@@ -8,6 +8,26 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 26 — entity resolution · PR #22
+
+The gap `relations.py` named in its own docstring: exact joins, no fuzzy matching.
+
+- `vrusha/store/entities.py` — normalise, expand abbreviations, block on three
+  characters, score with `ratio`, merge with union-find, keep groups of two or
+  more; `x_entities` / `x_entity_aliases` store every alias with its score
+- `vrusha entities --build`, `vrusha entities`
+- `tests/test_entities.py` — 16 tests, half of them refusals
+
+**The measurement that chose the metric:** `token_set_ratio` scores
+`acme corp` against `acme corporation` at **72** and against `acme` at **100** —
+backwards for this job. Abbreviation expansion plus a character ratio gives 100
+and 40 respectively. `rapidfuzz` when installed, `difflib` when not.
+
+**Deliberately conservative:** `Acme` and `Acme Corporation` are not merged. They
+are often different companies.
+
+---
+
 ## Wave 25 — model2vec is the default embedder · PR #21
 
 On the evidence from waves 21 and 24: `bm25 + hash` scored **8% recall@1**, worse
