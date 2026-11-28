@@ -16,6 +16,7 @@
     vrusha generate               sample from a checkpoint
     vrusha extract --dir PATH     html tables and csv into typed rows
     vrusha tables                 the extracted tables, and their schemas
+    vrusha derive                 a computed column, from a checked formula
     vrusha verify --refetch       is what we stored still true?
     vrusha index build            the vector index: routed scan over int8
     vrusha index export           push the same chunks into RagForge
@@ -779,6 +780,49 @@ def cmd_tables(args, cfg, rules, registry) -> int:
     return 0
 
 
+def cmd_derive(args, cfg, rules, registry) -> int:
+    """Add computed columns to an extracted table."""
+    from .store.formula import FormulaError
+    from .store.records import derive_table
+
+    if not args.table:
+        print("derive: give --table <id> (see `vrusha tables`)")
+        return 2
+
+    if args.spec:
+        try:
+            with open(args.spec, encoding="utf-8") as handle:
+                spec = json.load(handle)
+        except (OSError, ValueError) as exc:
+            print(f"derive: cannot read {args.spec}: {exc}")
+            return 2
+    elif args.name and args.expr:
+        spec = {"derived": [{"name": args.name, "expr": args.expr,
+                             "type": args.type,
+                             "guards": list(args.guard or [])}]}
+    else:
+        print('derive: give --spec formulas.json, or --name and --expr')
+        return 2
+
+    store = _open_store(cfg)
+    try:
+        result = derive_table(store, args.table, spec)
+    except FormulaError as exc:
+        print(f"derive: {exc}")
+        return 1
+    finally:
+        store.close()
+
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        return 0
+    for column in result["columns"]:
+        guards = f"  when {'; '.join(column['guards'])}" if column["guards"] else ""
+        print(f"  {column['name']:<20} = {column['expr']}{guards}")
+        print(f"  {'':<20}   {column['nulls']} null(s) of {result['rows']}")
+    return 0
+
+
 def cmd_verify(args, cfg, rules, registry) -> int:
     from .verify import format_results, run_verify, summarise
     if getattr(args, "refetch", False):
@@ -972,6 +1016,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=0, help="files to process")
     p.add_argument("--mdy", action="store_true", help="month-first dates (US corpora)")
     p.set_defaults(func=cmd_extract)
+
+    p = sub.add_parser("derive", parents=[common],
+                       help="add a computed column to an extracted table")
+    p.add_argument("--table", type=int, default=0)
+    p.add_argument("--spec", default="", help='JSON: {"derived": [{name, expr, guards}]}')
+    p.add_argument("--name", default="")
+    p.add_argument("--expr", default="")
+    p.add_argument("--type", default="float")
+    p.add_argument("--guard", action="append", help="expression that must be true")
+    p.set_defaults(func=cmd_derive)
 
     p = sub.add_parser("tables", parents=[common],
                        help="list extracted tables, or dump one table's rows")

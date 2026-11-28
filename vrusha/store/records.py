@@ -221,6 +221,65 @@ def extract_dir(store, directory: str, *, licence: Optional[str] = None,
 # ---------------------------------------------------------------------------
 
 
+def derive_table(store, table_id: int, spec: dict) -> Dict[str, object]:
+    """Add computed columns to a table. Compiles first, writes second.
+
+    Every formula is checked before any row is touched, so a bad spec fails
+    once with nothing written rather than leaving half a table derived.
+    """
+    from .formula import FormulaError, compile_spec
+
+    ensure_schema(store)
+    existing = store.conn.execute(
+        "SELECT name, position FROM x_columns WHERE table_id = ? ORDER BY position",
+        (int(table_id),)).fetchall()
+    if not existing:
+        raise FormulaError(f"table {table_id} has no columns; extract it first")
+    columns = [row["name"] for row in existing]
+    derived = compile_spec(spec, columns)          # the security boundary
+
+    rows = store.conn.execute(
+        "SELECT row_number, data FROM x_rows WHERE table_id = ? ORDER BY row_number",
+        (int(table_id),)).fetchall()
+    if not rows:
+        raise FormulaError(f"table {table_id} has no rows")
+
+    nulls = {item.name: 0 for item in derived}
+    updates = []
+    for row in rows:
+        values = json.loads(row["data"])
+        for item in derived:
+            try:
+                value = item.compute(values)
+            except FormulaError:
+                value = None
+            if value is None:
+                nulls[item.name] += 1
+            values[item.name] = value
+        updates.append((json.dumps(values, ensure_ascii=False, default=str),
+                        int(table_id), int(row["row_number"])))
+
+    store.conn.executemany(
+        "UPDATE x_rows SET data = ? WHERE table_id = ? AND row_number = ?", updates)
+
+    position = max(int(row["position"]) for row in existing) + 1
+    for item in derived:
+        store.conn.execute(
+            "INSERT OR REPLACE INTO x_columns "
+            "(table_id, position, name, type, unit, currency, null_rate, samples) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (int(table_id), position, item.name, item.type, None, None,
+             round(nulls[item.name] / max(1, len(rows)), 3),
+             json.dumps([item.expr])))
+        position += 1
+    store.commit()
+
+    return {"table_id": int(table_id), "rows": len(rows),
+            "columns": [{"name": item.name, "expr": item.expr,
+                         "guards": item.guards, "nulls": nulls[item.name]}
+                        for item in derived]}
+
+
 def list_tables(store) -> List[Dict[str, object]]:
     ensure_schema(store)
     rows = store.conn.execute(

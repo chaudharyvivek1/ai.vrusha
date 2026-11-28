@@ -156,12 +156,15 @@ large.
 
 ## Implemented so far
 
-Steps 1 and 2 of the plan are in, with tests:
+Steps 1 to 3 of the plan are in, with tests:
 
 ```bash
 vrusha extract --dir ./pages --licence MIT    # html tables + csv -> typed rows
 vrusha tables                                  # what was extracted, with schemas
 vrusha tables --id 1                           # the rows themselves
+vrusha derive --table 1 --name price_lakh \
+       --expr "price / 100000" --guard "price > 0"
+vrusha derive --table 1 --spec formulas.json   # several columns at once
 vrusha verify --refetch                        # is what we stored still true?
 vrusha verify --refetch --apply                # ... and write the result back
 ```
@@ -195,13 +198,50 @@ for `unchanged` (refresh `retrieved`) and `gone` (record the status).
 
 1. ~~`verify --refetch`~~ — done.
 2. ~~Table extraction + schema inference for HTML/CSV~~ — done.
-3. **Tier 1 formulas** — derived columns (`price / area`), AST-restricted.
+3. ~~Tier 1 formulas~~ — done (`vrusha/store/formula.py`, `vrusha derive`).
 4. **JSON-LD and schema.org** — typed entities that need no table at all.
 5. **PDF tables** — the hardest, which is why it is last of the sources.
 6. **SearXNG + trafilatura** as the search/extract path behind `harvest`.
 7. **Relation inference** across tables (entity keys, join edges, confidence).
 8. **Tier 2 sandboxed scripts** — last, because it is the only irreversible
    risk in the list, and a subprocess is not a sandbox.
+
+## Formulas
+
+A derived column is a string that arrives from a config file and runs against
+values that came off a web page, so it is never handed to `eval`. It is parsed
+with `ast`, walked against a whitelist, and interpreted by `formula.py`:
+
+| allowed | not allowed |
+|---|---|
+| numbers, strings, `True`/`False`/`None` | attribute access (`x.__class__`) |
+| column names | subscripts (`os.environ['X']`) |
+| `+ - * / // % **`, unary `-`/`+` | comprehensions, lambdas |
+| `== != < <= > >=`, `and`/`or`/`not` | any call not on the list |
+| `a if b else c` | `import`, `eval`, `exec`, `open`, `__import__` |
+| `min max round abs sum len if_null date_diff` | |
+
+Refused at compile time, before a single row is read:
+
+```
+$ vrusha derive --table 1 --name x --expr "__import__('os').system('id')"
+derive: only named functions may be called, not Attribute
+$ vrusha derive --table 1 --name x --expr "price.__class__"
+derive: Attribute is not allowed in a formula (price.__class__)
+```
+
+Semantics that matter for data rather than for tests: `None` propagates (a
+missing price makes the derived value missing, not zero), division by zero is
+`None` rather than an exception, and a guard (`"price > 0"`) makes a row
+skippable without a `CASE` in every query. A spec is compiled in full before
+any write, so a bad formula leaves the table exactly as it was.
+
+```json
+{"derived": [
+  {"name": "price_lakh", "expr": "price / 100000", "type": "float"},
+  {"name": "per_unit", "expr": "price / storage", "guards": ["storage > 0"]}
+]}
+```
 
 ## Known limits, stated
 

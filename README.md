@@ -242,6 +242,7 @@ endpoint.
 | `generate` | sample from a checkpoint |
 | `extract --dir` | html tables and csv into typed rows — see [docs/EXTRACT.md](docs/EXTRACT.md) |
 | `tables` | the extracted tables, their schemas, and their rows |
+| `derive --table N` | a computed column from a checked formula — see [docs/EXTRACT.md](docs/EXTRACT.md) |
 | `verify` | quality control over the store |
 | `verify --refetch` | is what we stored still true? drift, licence, 404s |
 | `index build\|stats\|drop` | the vector index — see [docs/ANN.md](docs/ANN.md) |
