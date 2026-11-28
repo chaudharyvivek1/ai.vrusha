@@ -802,6 +802,49 @@ def bench_remote_loop() -> Dict[str, float]:
             "done": float(result.done), "tasks": float(len(tasks))}
 
 
+def bench_compare() -> Dict[str, float]:
+    """Four levels against one agent, on the same questions."""
+    from vrusha import compare
+    from vrusha.config import DEFAULTS, ensure_dirs, resolve
+    from vrusha.harvest.fetch import Document
+    from vrusha.ingest import ingest_documents
+    from vrusha.languages import load_registry
+    from vrusha.rules import load_rules
+    from vrusha.store.blackboard import Blackboard
+    from vrusha.store.claims import Claims
+    from vrusha.store.db import Store
+    from vrusha.store.embed import get_embedder
+    from vrusha.store.registry import Registry
+
+    cfg = {key: (dict(value) if isinstance(value, dict) else value)
+           for key, value in DEFAULTS.items()}
+    cfg["paths"] = dict(DEFAULTS["paths"])
+    cfg["paths"]["root"] = tempfile.mkdtemp()
+    ensure_dirs(cfg)
+    store = Store(resolve(cfg, "db"))
+    documents = []
+    for name in sorted(os.listdir(os.path.join(ROOT, "docs"))):
+        if not name.endswith(".md"):
+            continue
+        path = os.path.join(ROOT, "docs", name)
+        with open(path, encoding="utf-8") as handle:
+            documents.append(Document(url=f"file://{path}", title=name,
+                                      status=200, text=handle.read()))
+    embedder = get_embedder(cfg)
+    ingest_documents(documents, store, cfg, load_rules(), load_registry(),
+                     embedder, licence="MIT", verbose=False)
+    board = Blackboard(store)
+    result = compare.run(store, embedder, cfg, board, Claims(board),
+                         Registry(board), run_id="bench-compare")
+    store.close()
+    return {"single_s": result.single_seconds,
+            "orchestrated_s": result.orchestrated_seconds,
+            "cost_ratio": result.cost_ratio,
+            "quality_delta": result.quality_delta,
+            "board_entries": float(result.board_entries),
+            "questions": float(result.questions)}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -825,6 +868,7 @@ BENCHMARKS: List[tuple] = [
     ("pool", bench_pool, "1, 2, 4 and 8 workers on the same 8 tasks"),
     ("remote", bench_remote, "a remote agent's round trip over HTTP"),
     ("remote_loop", bench_remote_loop, "the loop in-process against over HTTP"),
+    ("compare", bench_compare, "four levels against one agent, same questions"),
 ]
 
 
