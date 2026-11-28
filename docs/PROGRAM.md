@@ -119,6 +119,14 @@ is how a repo becomes unbuildable in a year.
 
 ---
 
+## Next programme: the agent fabric
+
+The six parts above are done. The next plan is `docs/AGENTS.md` — four levels of
+agent (super, admin, parent, sub), a shared append-only blackboard, 64 concurrent
+workers, and one harvested skill per agent. It starts with a design and ten
+steps, each with a test that fails today, because the first step (the blackboard)
+is useful even if the hierarchy is later replaced by a scheduler.
+
 ## Order of work
 
 1. Math layer (this part, now)

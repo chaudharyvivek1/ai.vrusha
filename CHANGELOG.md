@@ -8,6 +8,32 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 30 — the agent fabric, designed · PR #26
+
+The plan for four levels of agent, sixty-four at a time, with one shared board.
+Documentation only: this wave builds nothing, on purpose.
+
+- `docs/AGENTS.md` — the architecture, the context model, the concurrency limits,
+  the security model, the transport, the skill pipeline, and **ten steps each
+  with a test that fails today**
+- `docs/PROGRAM.md`, `README.md` — pointers
+
+**The argument that shaped it:** sixty-four agents each holding a context window
+is 34 GB (1B model, 8k) to 275 GB (7B model, 8k) of KV cache. The arithmetic is
+in the doc, because it is the reason the context window cannot be the unit of
+parallelism. What parallelises is the work; shared state belongs in an
+append-only blackboard and the store, read by delta.
+
+**The risk that shaped it:** "one agent can read another's context" is also "one
+agent can be instructed by another's context". Entries are data, never
+instructions, and step 10 is an injection test that must pass before the feature
+touches the open web.
+
+**What it refuses:** shared literal windows, free-form agent-to-agent chat, any
+uncapped fan-out, and claiming speed without measuring it (step 9).
+
+---
+
 ## Wave 29 — the JSON API reaches everything · PR #25
 
 The server had `/search` and `/ask`; the extraction layer, the entity groups and

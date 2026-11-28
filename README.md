@@ -253,7 +253,8 @@ endpoint.
 | `index build\|stats\|drop` | the vector index — see [docs/ANN.md](docs/ANN.md) |
 | `index export` | push the same chunks into RagForge (JSONL or HTTP) |
 | `backends` | which engines are usable, how fast each has been — see [docs/BACKENDS.md](docs/BACKENDS.md) |
-| `serve` | one JSON API, either engine behind it |
+| `serve` | one JSON API, either engine behind it — see [docs/SERVE.md](docs/SERVE.md) |
+| — | the plan for many agents at once: [docs/AGENTS.md](docs/AGENTS.md) |
 | `report` | one page |
 
 Every command takes `--json`, `--root` and `--config`.
