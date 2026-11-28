@@ -8,6 +8,31 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 51 — Part 26: bounded graph ranking, Phase 4 closed · PR #47
+
+- `vrusha/store/graphboost.py` — a chunk whose entities share a community with the
+  query gets a multiplicative boost, **capped at 15% and at 5 hits**; off by default
+- `vrusha/store/query.py` — wired behind `graph.boost`
+- `bench/registry.py` — `graphboost`; `docs/benchmarks/16-graphboost.md`
+
+**Measured on the 40 questions: no metric changes at all** — recall@1, recall@5,
+nDCG@10 and passage@5 are identical with the boost on. The reason is Part 23's
+finding: `docs/` produces **zero edges**, so there is no graph to boost with.
+
+**The verdict: built, bounded, off by default, unproven on this corpus.** Turning it
+on would be a preference, not an improvement — the same bar the lexical reranker
+cleared and the cross-encoder failed.
+
+**The benchmark demonstrated its own caveat:** the first fixture was a *chain*, which
+label propagation merges into one community, so every hit got the same boost and
+nothing reordered — exactly the "a constant reorders nothing" line already in the
+module docstring.
+
+**Phase 4 closed:** the graph machinery works and this corpus cannot exercise it. A
+corpus of business or news prose would, and the parts are ready for one.
+
+---
+
 ## Wave 50 — Part 25: multi-hop paths · PR #46
 
 - `vrusha/store/paths.py` — breadth-first path search, `max_hops` enforced, every

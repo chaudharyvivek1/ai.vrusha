@@ -62,7 +62,7 @@ Status: `[x]` done · `[~]` partly · `[ ]` not started · `[-]` deliberately sk
 | 23 | relation extraction with evidence | `[x]` | [part-23](part-23-relations.md) |
 | 24 | community detection | `[x]` | [part-24](part-24-communities.md) |
 | 25 | multi-hop expansion | `[x]` | [part-25](part-25-paths.md) |
-| 26 | bounded graph ranking | `[ ]` |
+| 26 | bounded graph ranking | `[x]` | [part-26](part-26-graphboost.md) — **off**: nothing to boost |
 
 ### Phase 5 — compaction
 

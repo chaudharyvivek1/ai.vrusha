@@ -118,6 +118,13 @@ DEFAULTS: Dict[str, Any] = {
         "min_vector_similarity": 0.05,
         "refuse_below": 0.02,
     },
+    "graph": {
+        #: Off by default: a graph boost that has not been measured against its
+        #: absence is a preference, not an improvement.
+        "boost": False,
+        "weight": 0.15,
+        "max_hits": 5,
+    },
     "rerank": {
         #: `none` until a reranker has been measured against the absence of one.
         #: Part 15 adds a lexical reranker; Part 16 an optional cross-encoder;
