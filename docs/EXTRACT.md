@@ -156,7 +156,7 @@ large.
 
 ## Implemented so far
 
-Steps 1 to 7 of the plan are in, with tests:
+Steps 1 to 8 of the plan are in — the queue is complete — with tests:
 
 ```bash
 vrusha extract --dir ./pages --licence MIT    # html tables + csv -> typed rows
@@ -203,8 +203,8 @@ for `unchanged` (refresh `retrieved`) and `gone` (record the status).
 5. ~~PDF tables~~ — done (`vrusha/store/pdf.py`, no PDF dependency).
 6. ~~SearXNG + trafilatura, and `harvest --extract`~~ — done.
 7. ~~Relation inference~~ — done (`vrusha/store/relations.py`, `vrusha joins`).
-8. **Tier 2 sandboxed scripts** — last, because it is the only irreversible
-   risk in the list, and a subprocess is not a sandbox.
+8. ~~Tier 2 sandboxed scripts~~ — done (`vrusha/store/sandbox.py`,
+   `vrusha derive --script --allow-scripts`).
 
 ## Formulas
 
@@ -360,6 +360,50 @@ vrusha joins --table 3    # one table's relations
 What it does not do: entity resolution (two spellings of one vendor), transitive
 closure across a chain of joins, or fuzzy matching. Each can be wrong in a way
 that silently merges two companies into one.
+
+## Scripts (tier 2)
+
+A formula cannot execute anything. A script can, so the honest question is not
+"is it safe" but **what exactly is contained**:
+
+```bash
+vrusha derive --table 1 --script clean.py --allow-scripts
+```
+
+```python
+# clean.py
+def transform(rows):
+    return [{"price_lakh": (row["price"] or 0) / 100000} for row in rows]
+```
+
+| enforced | how |
+|---|---|
+| network | a user+network namespace with no interfaces — `connect()` returns `ENETUNREACH`, verified with the import guard switched off |
+| cpu, memory | `RLIMIT_CPU`, `RLIMIT_AS` |
+| processes | `RLIMIT_NPROC` 32 |
+| output | `RLIMIT_FSIZE`, stdout to a file, so a print loop cannot exhaust memory |
+| wall clock | the process group is killed at `--timeout` |
+| environment | `PATH`, `HOME`, `TMPDIR` in a temp dir. No store, no config, no keys |
+| shape | one row per input row, scalar cells, valid column names — or it is refused |
+| provenance | every column is stamped `script:<sha256 prefix>`, so a computed value is never mistaken for a stated one |
+
+**What is not enforced, and you should know it before running someone else's
+script:**
+
+- **Filesystem.** The script runs as you. It can read any file you can read,
+  including the database by its path. The store handle is not given to it; the
+  path is guessable.
+- **The import denylist is a speed bump.** `__import__`, `importlib` and a
+  vendored copy of a module walk around it. Only the namespace blocks the
+  network for real, and only when the kernel allows one — `vrusha doctor` and
+  `sandbox.describe()` say which mode this machine is in.
+- **Without a namespace** (older kernels, restrictive containers, some CI) the
+  script runs in your process tree with rlimits between it and the machine.
+
+So this stops accidents, runaway loops and naive exfiltration. It is **not** a
+defence against a determined attacker. For that, run the whole thing in a
+container with no network and a read-only filesystem — the code is written so
+that is a deployment choice, not a rewrite.
 
 ## Known limits, stated
 

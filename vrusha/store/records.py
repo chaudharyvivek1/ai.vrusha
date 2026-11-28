@@ -75,6 +75,14 @@ def ensure_schema(store) -> None:
             store.conn.execute("ALTER TABLE x_tables ADD COLUMN kind TEXT")
         except Exception:                       # noqa: BLE001 - already added
             pass
+    # `origin` records how a column was produced: a page, a formula, a script
+    column_rows = {row[1] for row in
+                   store.conn.execute("PRAGMA table_info(x_columns)").fetchall()}
+    if "origin" not in column_rows:
+        try:
+            store.conn.execute("ALTER TABLE x_columns ADD COLUMN origin TEXT")
+        except Exception:                       # noqa: BLE001 - already added
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -408,6 +416,79 @@ def derive_table(store, table_id: int, spec: dict) -> Dict[str, object]:
             "columns": [{"name": item.name, "expr": item.expr,
                          "guards": item.guards, "nulls": nulls[item.name]}
                         for item in derived]}
+
+
+def apply_script(store, table_id: int, script_path: str, *, timeout: float = 5.0,
+                 memory_mb: int = 512, isolation: str = "auto") -> Dict[str, object]:
+    """Run a user script over a table's rows and store what it returns.
+
+    The script is tier 2: real Python, in a child process, under the limits in
+    `sandbox.py`. Every column it produces is stamped with the script's hash, so
+    a value computed by code is never mistaken for one the page stated.
+    """
+    from .sandbox import run_script, script_hash
+
+    ensure_schema(store)
+    existing = store.conn.execute(
+        "SELECT name, position FROM x_columns WHERE table_id = ? ORDER BY position",
+        (int(table_id),)).fetchall()
+    if not existing:
+        raise ValueError(f"table {table_id} has no columns; extract it first")
+
+    raw = store.conn.execute(
+        "SELECT row_number, data FROM x_rows WHERE table_id = ? ORDER BY row_number",
+        (int(table_id),)).fetchall()
+    if not raw:
+        raise ValueError(f"table {table_id} has no rows")
+    rows = [json.loads(row["data"]) for row in raw]
+
+    result = run_script(script_path, rows, timeout=timeout, memory_mb=memory_mb,
+                        isolation=isolation)
+    if not result.ok:
+        return {"ok": False, "error": result.error, "run": result.to_dict()}
+
+    origin = f"script:{script_hash(script_path)}"
+    produced = sorted({key for row in result.rows for key in row})
+    position = max(int(row["position"]) for row in existing) + 1
+    nulls = {key: 0 for key in produced}
+    updates = []
+
+    for row, computed in zip(raw, result.rows):
+        values = json.loads(row["data"])
+        for key in produced:
+            value = computed.get(key)
+            if value is None:
+                nulls[key] += 1
+            values[key] = value
+        updates.append((json.dumps(values, ensure_ascii=False, default=str),
+                        int(table_id), int(row["row_number"])))
+
+    store.conn.executemany(
+        "UPDATE x_rows SET data = ? WHERE table_id = ? AND row_number = ?", updates)
+
+    for key in produced:
+        samples = [row.get(key) for row in result.rows[:3] if row.get(key) is not None]
+        kind = "float"
+        if samples and all(isinstance(v, bool) for v in samples):
+            kind = "bool"
+        elif samples and all(isinstance(v, int) and not isinstance(v, bool)
+                             for v in samples):
+            kind = "int"
+        elif samples and all(isinstance(v, str) for v in samples):
+            kind = "text"
+        store.conn.execute(
+            "INSERT OR REPLACE INTO x_columns "
+            "(table_id, position, name, type, unit, currency, null_rate, samples, origin) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (int(table_id), position, key, kind, None, None,
+             round(nulls[key] / max(1, len(rows)), 3),
+             json.dumps(samples, ensure_ascii=False, default=str), origin))
+        position += 1
+    store.commit()
+
+    return {"ok": True, "table_id": int(table_id), "rows": len(rows),
+            "origin": origin, "run": result.to_dict(),
+            "columns": [{"name": key, "nulls": nulls[key]} for key in produced]}
 
 
 def list_tables(store) -> List[Dict[str, object]]:

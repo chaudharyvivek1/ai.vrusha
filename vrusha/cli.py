@@ -820,6 +820,42 @@ def cmd_derive(args, cfg, rules, registry) -> int:
         print("derive: give --table <id> (see `vrusha tables`)")
         return 2
 
+    if args.script:
+        if not args.allow_scripts:
+            print("derive: running a script executes code against scraped data. "
+                  "Pass --allow-scripts if that is what you mean; a formula "
+                  "(--expr) cannot execute anything and is the safer default.")
+            return 2
+        from .store.records import apply_script
+        store = _open_store(cfg)
+        try:
+            result = apply_script(store, args.table, args.script,
+                                  timeout=args.timeout,
+                                  memory_mb=args.memory_mb,
+                                  isolation=args.isolation)
+        except (ValueError, OSError) as exc:
+            print(f"derive: {exc}")
+            return 1
+        finally:
+            store.close()
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            return 0 if result.get("ok") else 1
+        if not result.get("ok"):
+            print(f"derive: {result['error']}")
+            run = result.get("run") or {}
+            print(f"  isolation {run.get('isolation')}  "
+                  f"{run.get('seconds')}s  exit {run.get('exit_code')}")
+            if run.get("stderr"):
+                print("  stderr: " + str(run["stderr"]).strip()[:300])
+            return 1
+        run = result["run"]
+        print(f"  {result['origin']} over {result['rows']} row(s) "
+              f"in {run['seconds']}s ({run['isolation']})")
+        for column in result["columns"]:
+            print(f"  {column['name']:<20} {column['nulls']} null(s)")
+        return 0
+
     if args.spec:
         try:
             with open(args.spec, encoding="utf-8") as handle:
@@ -1098,6 +1134,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--expr", default="")
     p.add_argument("--type", default="float")
     p.add_argument("--guard", action="append", help="expression that must be true")
+    p.add_argument("--script", default="", help="a Python file defining transform(rows)")
+    p.add_argument("--allow-scripts", action="store_true",
+                   help="required to run --script: it executes code")
+    p.add_argument("--timeout", type=float, default=5.0)
+    p.add_argument("--memory-mb", type=int, default=512)
+    p.add_argument("--isolation", default="auto",
+                   choices=["auto", "namespace", "process"])
     p.set_defaults(func=cmd_derive)
 
     p = sub.add_parser("tables", parents=[common],

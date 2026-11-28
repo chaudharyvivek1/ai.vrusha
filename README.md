@@ -243,6 +243,7 @@ endpoint.
 | `extract --dir` | html tables and csv into typed rows — see [docs/EXTRACT.md](docs/EXTRACT.md) |
 | `tables` | the extracted tables, their schemas, and their rows |
 | `joins --build` | which columns across tables are the same entity — see [docs/EXTRACT.md](docs/EXTRACT.md) |
+| `derive --script` | run your own transform under limits — needs `--allow-scripts` |
 | `derive --table N` | a computed column from a checked formula — see [docs/EXTRACT.md](docs/EXTRACT.md) |
 | `verify` | quality control over the store |
 | `verify --refetch` | is what we stored still true? drift, licence, 404s |
