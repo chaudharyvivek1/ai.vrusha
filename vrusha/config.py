@@ -61,8 +61,11 @@ DEFAULTS: Dict[str, Any] = {
         "backend": "auto",             # auto | fixtures | ddg | searxng | tavily | brave
     },
     "store": {
-        "embed_backend": "hash",       # hash | ollama | sentence-transformers
+        "embed_backend": "hash",       # hash | model2vec | ollama | sentence-transformers
         "embed_model": "qwen3-embedding:0.6b",
+        #: model2vec's static model. ~8 MB, numpy-only inference, no torch: the
+        #: right default for a laptop, and a real step up from `hash`.
+        "embed_model_static": "minishlab/potion-base-8M",
         "embed_dim": 256,
         "max_chunk_lines": 60,
         "overlap_lines": 3,

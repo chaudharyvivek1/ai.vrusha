@@ -10,7 +10,7 @@ that works rather than a document that says it does.
 | 3 | ~~**dubforge** as a tool~~ — done (`vrusha/tools/`, `vrusha tools`, `docs/TOOLS.md`) |
 | 4 | ~~**forge3d** as a tool~~ — done, same adapter |
 | 5 | ~~**cutforge**~~ — registered, and reported as a specification: there is no engine to call |
-| 6 | **AI repo survey** | a shortlist with reasons, and whatever is adopted is a module with tests |
+| 6 | ~~**AI repo survey**~~ — done (`docs/SURVEY.md`; model2vec adopted as an embed backend) |
 
 Parts 3-5 share one decision, and part 6 has its own. Both are below, because
 they change what gets built.

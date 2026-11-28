@@ -8,6 +8,69 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 20 — survey, and model2vec adopted · PR #16
+
+The AI repo survey, and the one candidate that fixes the biggest gap in the store.
+
+- `docs/SURVEY.md` — six candidates judged on licence, what they add, dependency
+  weight and offline testability; a rejected list with reasons (GPL, frameworks,
+  torch-heavy PDF stacks)
+- `vrusha/store/embed.py` — `Model2VecEmbedder`: static embeddings, ~8 MB, numpy
+  inference; dimension read **from the model**, vectors normalised, loaded
+  lazily, falls back to `hash` with a printed reason
+- `vrusha/config.py` — `store.embed_backend: model2vec`, `embed_model_static`
+
+**Why:** the default embedder was `hash`, so the vector signal could never beat
+BM25 — the largest quality gap in the project, visible in retrieval quality, in
+the benchmark's isotropic row, and in the advice in `docs/ANN.md`.
+
+**Tested:** dimension discovery, normalisation, the fallback and the aliases,
+against a stub module — the hub is not reachable from CI, and a test that needs a
+network fails for the wrong reason.
+
+---
+
+## Wave 19 — tools: dubforge, forge3d, cutforge · PR #15
+
+One interface for the three engines, and an honest inventory.
+
+- `vrusha/tools/__init__.py` — `ExternalTool`: found as `module` | `checkout` |
+  `cli`, run as a **subprocess** with a whitelisted action list, JSON parsed when
+  the tool emits it, timeouts enforced
+- `vrusha/tools/{dubforge,forge3d,cutforge}.py` — three registrations
+- `vrusha tools`, `vrusha tools NAME [--action] [--option k=v]`
+- `docs/TOOLS.md`
+
+**The decision:** the adapter is in-tree, the code is not. Copying dubforge's 83
+files would buy drift and pull `trimesh`/`scipy`/`pillow` into a numpy-only
+package; one clone, one command and one honest status line is what "merged" needs
+to mean.
+
+**What reading the repos found:** `cutforge` is a *specification* — its README
+says so — and its LICENSE is "All rights reserved", which cannot be reconciled
+with this repository's MIT. It is registered as `mode: specification` and never
+available, so the listing tells the truth instead of promising an engine.
+
+---
+
+## Wave 18 — research loop · PR #14
+
+A question in, an answer out, and every source that made it.
+
+- `vrusha/research.py` — `search` → fetch → gate → `ingest` → `extract` → `ask`,
+  returning sources as a first-class output
+- a source is a URL, title, **licence**, retrieval time, chunk/table/formula
+  counts, and `verified` (`unchanged` / `drifted` / `rewritten` / `gone`)
+- `vrusha research "question" [--verify] [--licence MIT]`
+- `docs/RESEARCH.md`, and this file
+
+**Bugs:** `Answer.hits` is a count, not a list, so the citation loop threw
+`TypeError`; a refused page returned zero sources with no explanation; and a
+`harvest.min_words` override had **no effect at all** — the gate reads
+`rules["quality.min_words"]`. A config key read by nothing is worse than no key.
+
+---
+
 ## Wave 17 — math layer · PR #13
 
 Formulae are canonicalised before matching, so two spellings of one expression
