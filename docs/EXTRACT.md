@@ -405,6 +405,45 @@ defence against a determined attacker. For that, run the whole thing in a
 container with no network and a read-only filesystem — the code is written so
 that is a deployment choice, not a rewrite.
 
+## Entity resolution: one vendor, five spellings
+
+`vrusha joins` finds columns that share **exact** values. That is not enough for
+names: `Acme Corp`, `ACME Corporation` and `Acme Pvt. Ltd.` are one company and
+three strings.
+
+```bash
+vrusha entities --build            # resolve and store
+vrusha entities                    # the groups, with scores
+```
+
+```
+  acme corporation  (3 spellings)
+      100  acme corp
+       80  acme corporation ltd
+```
+
+| step | how | why |
+|---|---|---|
+| normalise | `relations.normalise` | case, spacing and separators folded |
+| expand | `corp`→`corporation`, `ltd`→`limited`, `pvt`→`private`, 14 in all | no string metric knows `corp` means `corporation` |
+| block | first three characters | so the comparison is not every value against every other |
+| score | `ratio`, not `token_set_ratio` | a set metric scores `acme` against `acme corporation` at **100** because one contains the other, which is how two companies get merged |
+| merge | union-find at ≥ 90 | `A~B` and `B~C` is one group even when `A` and `C` score below the threshold |
+| keep | groups of two or more | a group of one is a row, not an entity |
+
+**It is conservative on purpose.** `Acme` and `Acme Corporation` score 40 and are
+not merged: they are often different companies, and the docstring of
+`relations.py` already said that merging two companies is the failure mode that
+looks like a feature. Every alias is stored with the score that put it in the
+group, so a human can reject one without re-running anything.
+
+What it still will not do: decide that `Acme` and `Beta Holdings` are the same
+company because both are in Pune. That is a judgement about the world, and a
+system that guesses it will eventually be confidently wrong.
+
+`rapidfuzz` when installed, `difflib` when not — the fallback is slower and scores
+slightly differently, which the tests tolerate by asserting bands, not equality.
+
 ## Known limits, stated
 
 - **Units are not converted.** `50 GB` and `5 TB` are both stored as integers
