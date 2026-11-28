@@ -862,6 +862,24 @@ def bench_render() -> Dict[str, float]:
             "shell_bytes": float(len(shell))}
 
 
+def bench_ocr() -> Dict[str, float]:
+    """What an image costs to identify — the part that needs no system binary."""
+    import io as _io
+
+    from PIL import Image
+
+    from vrusha.store import ocr
+
+    buffer = _io.BytesIO()
+    Image.new("RGB", (800, 600), "white").save(buffer, format="PNG")
+    data = buffer.getvalue()
+    detect = _timeit(lambda: ocr.looks_like_image(data), repeats=50)
+    describe = _timeit(lambda: ocr.describe(data), repeats=20)
+    return {"detect_us": detect["p50_ms"] * 1000.0,
+            "describe_ms": describe["p50_ms"],
+            "bytes": float(len(data))}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -887,6 +905,7 @@ BENCHMARKS: List[tuple] = [
     ("remote_loop", bench_remote_loop, "the loop in-process against over HTTP"),
     ("compare", bench_compare, "four levels against one agent, same questions"),
     ("render", bench_render, "shell detection, which must be free"),
+    ("ocr", bench_ocr, "identifying an image, which needs no binary"),
 ]
 
 

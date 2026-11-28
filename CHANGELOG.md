@@ -8,6 +8,25 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 61 — Part 37: images — metadata measured, text a seam · PR #57
+
+- `vrusha/store/ocr.py` — magic-byte detection (not extensions), `describe()` for
+  format/dimensions/mode that never raises, `NullOcr` (default) and `TesseractOcr`
+  (optional, lazy), `maybe_read()` returning a sentence every time
+- `vrusha/config.py` — `extract.ocr.backend: none`
+- `bench/registry.py` — `ocr`; `docs/benchmarks/25-ocr.md`
+- `tests/test_ocr.py` — 14 tests
+
+**Measured:** **1.09 µs** to identify an image by magic bytes, **0.07 ms** to read
+its dimensions from a 2.8 KB PNG — both free next to a 9 ms retrieval.
+
+**Two things, only one needs a binary:** *what an image is* is Pillow, already a
+dependency, and it is now measured. *What an image says* is Tesseract, which is not
+installed and cannot be — no root — so it is a seam, tested with a fake, and the
+default stays `none`.
+
+---
+
 ## Wave 60 — Part 36: JavaScript-rendered pages · PR #56
 
 - `vrusha/harvest/render.py` — `NullRenderer` (default, declines), `PlaywrightRenderer`
