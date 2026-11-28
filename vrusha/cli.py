@@ -726,8 +726,13 @@ def cmd_extract(args, cfg, rules, registry) -> int:
             print("extract: give --dir with html or csv files")
             return 2
         if args.dir and os.path.isfile(args.dir):
-            result = extract_path(store, args.dir, licence=args.licence,
+            single = extract_path(store, args.dir, licence=args.licence,
                                   dayfirst=not args.mdy, verbose=not args.json)
+            # one file is a directory of one: give the summary the same shape
+            result = {"files": 1, "tables": single.get("tables", 0),
+                      "rows": single.get("rows", 0),
+                      "rejected": single.get("rejected", 0),
+                      "results": [single]}
         else:
             result = extract_dir(store, args.dir, licence=args.licence,
                                  dayfirst=not args.mdy, limit=args.limit,

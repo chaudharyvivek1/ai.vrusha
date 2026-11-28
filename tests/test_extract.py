@@ -187,21 +187,25 @@ def test_a_rejected_table_is_not_stored(tmp_path):
 def test_extract_dir_counts_files_and_tables(tmp_path):
     store = Store(resolve(_cfg(tmp_path), "db"))
     result = records.extract_dir(store, FIXTURES, licence="MIT", verbose=False)
-    assert result["files"] == 2
-    assert result["tables"] == 2
-    assert result["rows"] == 6
+    # 4 files: two html tables, two csv/jsonld fixtures. The layout table in
+    # plans.html is the one rejection; catalog.html yields Product x2 and
+    # Organization from its @graph.
+    assert result["files"] == 4
+    assert result["tables"] == 5
+    assert result["rows"] == 10
     assert result["rejected"] == 1
 
 
 def test_cli_extract_and_tables(tmp_path, capsys):
     root = str(tmp_path)
-    assert main(["--root", root, "extract", "--dir", FIXTURES, "--licence", "MIT"]) == 0
+    plans = os.path.join(FIXTURES, "plans.html")
+    assert main(["--root", root, "extract", "--dir", plans, "--licence", "MIT"]) == 0
     out = capsys.readouterr().out
-    assert "2 table(s)" in out and "6 row(s)" in out
+    assert "1 table(s)" in out and "3 row(s)" in out
 
     assert main(["--root", root, "tables"]) == 0
     listing = capsys.readouterr().out
-    assert "plans.html" in listing and "vendors.csv" in listing
+    assert "plans.html" in listing
 
     assert main(["--root", root, "tables", "--id", "1"]) == 0
     assert "Starter" in capsys.readouterr().out

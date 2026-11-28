@@ -156,7 +156,7 @@ large.
 
 ## Implemented so far
 
-Steps 1 to 3 of the plan are in, with tests:
+Steps 1 to 4 of the plan are in, with tests:
 
 ```bash
 vrusha extract --dir ./pages --licence MIT    # html tables + csv -> typed rows
@@ -199,7 +199,7 @@ for `unchanged` (refresh `retrieved`) and `gone` (record the status).
 1. ~~`verify --refetch`~~ — done.
 2. ~~Table extraction + schema inference for HTML/CSV~~ — done.
 3. ~~Tier 1 formulas~~ — done (`vrusha/store/formula.py`, `vrusha derive`).
-4. **JSON-LD and schema.org** — typed entities that need no table at all.
+4. ~~JSON-LD and schema.org~~ — done (`vrusha/store/jsonld.py`).
 5. **PDF tables** — the hardest, which is why it is last of the sources.
 6. **SearXNG + trafilatura** as the search/extract path behind `harvest`.
 7. **Relation inference** across tables (entity keys, join edges, confidence).
@@ -242,6 +242,37 @@ any write, so a bad formula leaves the table exactly as it was.
   {"name": "per_unit", "expr": "price / storage", "guards": ["storage > 0"]}
 ]}
 ```
+
+## JSON-LD
+
+Most product, event, recipe and organization pages already carry
+`application/ld+json` with the schema spelled out. That is a better source than
+any table on the same page: no header detection, no type guessing, and the page
+tells you what each field means. `extract` reads it automatically, and
+`vrusha tables` shows `kind: jsonld` beside `kind: html-table`.
+
+| rule | why |
+|---|---|
+| entities are grouped by `@type` | ten products on a page are one table with ten rows, not ten tables |
+| nested objects are flattened | `offers.price` becomes `offers_price`; a nested object is columns, not a JSON blob in a cell |
+| a **single** nested entity is not a table | an `Offer` inside one `Product` is already `offers_price`; a one-row table is noise |
+| several nested entities **are** a table | a page with five `Offer`s gets an `Offer` table with five rows |
+| a broken block is skipped | sites ship one valid `Organization` and one invalid `BreadcrumbList` in the same page |
+| `@context` and `@type` are not columns | the same value in every row is not data |
+| arrays of scalars are joined | `recipeCuisine: [Indian, Gujarati]` -> `"Indian, Gujarati"` |
+
+What the fixtures produce:
+
+| page | tables | rows |
+|---|---|---|
+| `catalog.html` (`@graph`: 2 Products, 1 Organization) | `Product`, `Organization` | 2, 1 |
+| `product.html` (1 Product, nested Offer/Brand/Rating) | `Product` | 1, with `offers_price`, `brand_name`, `aggregateRating_ratingValue` |
+
+And the values arrive typed from a page that wrote them as strings:
+`"₹4,999"` -> `4999`, `"Rs 5.5 lakh"` -> `550000`, `"२०२६-०९-१५"` -> `2026-09-15`.
+
+Re-extracting a document replaces its records rather than doubling them, so
+`extract` is safe to run again after a re-crawl.
 
 ## Known limits, stated
 
