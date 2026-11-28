@@ -8,6 +8,23 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 53 — Part 29: offload · PR #49
+
+- `vrusha/store/compaction.py` — an entry past 20,000 tokens is appended to the
+  blackboard as an `artifact` and replaced **in place** by a one-line reference
+  (`[offloaded seq 7 -> board:417, 25,000 tokens]`); order is preserved, the full
+  text stays readable
+- `bench/registry.py` — offload added to `compaction`
+- `tests/test_compaction.py` — 5 more tests
+
+**Measured:** an oversized entry becomes a reference in **3.72 ms**, and the token
+ratio rounds to **0.0**.
+
+**A reference beats a truncation:** `board:417` can be followed; a truncated
+20,000-token page is a shorter page with a hole in it, and nothing says where.
+
+---
+
 ## Wave 52 — Parts 27 and 28: compaction with verifiable summaries · PR #48
 
 - `vrusha/store/compaction.py` — compact at **85%** of a budget; offload a single

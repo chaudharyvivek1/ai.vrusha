@@ -596,6 +596,11 @@ def bench_graphboost() -> Dict[str, float]:
             "reordered": float(changed), "edges": float(len(rows))}
 
 
+def _tempfile_name() -> str:
+    import tempfile as _tempfile
+    return _tempfile.mktemp(suffix=".db")
+
+
 def bench_compaction() -> Dict[str, float]:
     """What compaction saves on a realistic run, and what it costs."""
     from vrusha.store import compaction
@@ -612,7 +617,22 @@ def bench_compaction() -> Dict[str, float]:
     timings = _timeit(lambda: compaction.compact(made), repeats=10)
     summary = compaction.compact(made)
     verdict = compaction.verify(summary, made)
+    # and the offload path: one oversized entry replaced by a reference
+    from vrusha.store.blackboard import Blackboard
+    from vrusha.store.db import Store as _Store
+    _store = _Store(_tempfile_name())
+    _board = Blackboard(_store)
+    big = Entry(run="r", seq=99, task="t1", kind="finding",
+                summary="page " + ("word " * 25000))
+    offload_ms = _timeit(lambda: compaction.offload(_board, [big], "r"),
+                         repeats=5)["p50_ms"]
+    _kept, offload_report = compaction.offload(_board, [big], "r")
+    _board.close()
+    _store.close()
     return {"entries": float(len(made)), "ms": timings["p50_ms"],
+            "offload_ms": offload_ms,
+            "offload_ratio": (offload_report["tokens_after"]
+                              / max(1, offload_report["tokens_before"])),
             "tokens_before": float(summary.tokens_before),
             "tokens_after": float(summary.tokens_after),
             "ratio": float(summary.ratio),

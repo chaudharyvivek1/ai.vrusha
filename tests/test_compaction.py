@@ -124,3 +124,69 @@ def test_a_huge_entry_needs_offloading():
     assert compaction.offload_needed(big) is True
     small = Entry(run="r", seq=1, kind="finding", summary="x" * 100)
     assert compaction.offload_needed(small) is False
+
+
+# ---------------------------------------------------------------------------
+# Part 29: offload
+# ---------------------------------------------------------------------------
+
+
+def _board(tmp_path):
+    from vrusha.store.blackboard import Blackboard
+    from vrusha.store.db import Store
+    store = Store(str(tmp_path / "board.db"))
+    return store, Blackboard(store)
+
+
+def test_an_oversized_entry_becomes_a_reference(tmp_path):
+    store, board = _board(tmp_path)
+    huge = Entry(run="r", seq=7, task="t1", kind="finding",
+                 summary="page " + ("word " * 25000))
+    kept, report = compaction.offload(board, [huge], "r")
+    assert report["offloaded"] == 1
+    assert len(kept) == 1
+    assert "offloaded seq 7" in kept[0].summary
+    assert compaction.tokens(kept[0].summary) < 20
+    store.close()
+
+
+def test_the_offloaded_text_is_still_readable(tmp_path):
+    store, board = _board(tmp_path)
+    huge = Entry(run="r", seq=7, task="t1", kind="finding",
+                 summary="secret " + ("word " * 25000))
+    kept, report = compaction.offload(board, [huge], "r")
+    board_seq = report["details"][0]["board_seq"]
+    entries = board.since("r", board_seq - 1, limit=10)
+    stored = [entry for entry in entries if entry.seq == board_seq][0]
+    assert "secret" in stored.summary or "secret" in str(stored.payload)
+    store.close()
+
+
+def test_a_small_entry_is_left_alone(tmp_path):
+    store, board = _board(tmp_path)
+    small = Entry(run="r", seq=1, task="t1", kind="finding", summary="short note")
+    kept, report = compaction.offload(board, [small], "r")
+    assert report["offloaded"] == 0
+    assert kept[0].summary == "short note"
+    store.close()
+
+
+def test_offload_reports_the_token_saving(tmp_path):
+    store, board = _board(tmp_path)
+    huge = Entry(run="r", seq=1, task="t1", kind="finding",
+                 summary="x " * 50000)
+    small = Entry(run="r", seq=2, task="t1", kind="progress", summary="tiny")
+    kept, report = compaction.offload(board, [huge, small], "r")
+    assert report["tokens_after"] < report["tokens_before"]
+    assert report["tokens_after"] < 20
+    store.close()
+
+
+def test_offload_keeps_the_order(tmp_path):
+    store, board = _board(tmp_path)
+    entries = [Entry(run="r", seq=index, task="t", kind="progress",
+                     summary=f"entry {index} " + ("w " * 30000 if index == 2 else ""))
+               for index in (1, 2, 3)]
+    kept, _report = compaction.offload(board, entries, "r")
+    assert [entry.seq for entry in kept] == [1, 2, 3]
+    store.close()
