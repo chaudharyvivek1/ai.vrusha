@@ -75,7 +75,7 @@ def test_the_registry_lists_every_benchmark_it_claims():
     names = [name for name, _function, _what in benchmarks.BENCHMARKS]
     assert names == ["blackboard", "claims", "registry", "address", "rerank",
                      "retrieval", "ingest", "extract", "serve", "index_delta",
-                     "snapshot", "entities", "edges", "communities", "paths", "graphboost", "compaction", "anticipate", "orchestrator", "pool", "remote"]
+                     "snapshot", "entities", "edges", "communities", "paths", "graphboost", "compaction", "anticipate", "orchestrator", "pool", "remote", "remote_loop"]
     assert len(set(names)) == len(names)
 
 

@@ -226,3 +226,141 @@ def test_the_pool_releases_every_slot(tmp_path):
                   worker=lambda task: "ok", workers=3, run_id="r1")
     assert registry.summary("r1")["live"] == 0
     store.close()
+
+
+# ---------------------------------------------------------------------------
+# Part 34: the loop over HTTP
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def remote_base(tmp_path):
+    from vrusha.serve import serve_in_thread
+    from vrusha.store.embed import HashEmbedder
+
+    store, _board, _claims, _registry, cfg = _pieces(tmp_path)
+    store.close()
+    httpd, _thread = serve_in_thread(cfg, HashEmbedder(32), port=0)
+    yield f"http://127.0.0.1:{httpd.server_address[1]}", cfg
+    httpd.shutdown()
+    httpd.server_close()
+
+
+def test_the_remote_loop_completes_every_task(remote_base):
+    base, cfg = remote_base
+    from vrusha.store.blackboard import Blackboard
+    from vrusha.store.claims import Claims
+    from vrusha.store.db import Store
+    from vrusha.store.registry import Registry
+    from vrusha.config import resolve
+
+    store = Store(resolve(cfg, "db"))
+    board = Blackboard(store)
+    result = orch.run_remote(store, board, Claims(board), Registry(board), cfg,
+                             "a then b then c", worker=lambda task: f"did {task}",
+                             base_url=base, workers=3, run_id="r1")
+    assert result.done == 3 and result.failed == 0
+    store.close()
+
+
+def test_the_remote_loop_writes_findings_over_http(remote_base):
+    base, cfg = remote_base
+    from vrusha.config import resolve
+    from vrusha.remote import RemoteBoard
+    from vrusha.store.blackboard import Blackboard
+    from vrusha.store.claims import Claims
+    from vrusha.store.db import Store
+    from vrusha.store.registry import Registry
+
+    store = Store(resolve(cfg, "db"))
+    board = Blackboard(store)
+    orch.run_remote(store, board, Claims(board), Registry(board), cfg, "a then b",
+                    worker=lambda task: f"result for {task}", base_url=base,
+                    run_id="r1")
+    entries = RemoteBoard(base).since("r1", 0)
+    summaries = [entry["summary"] for entry in entries]
+    assert any("result for a" in text for text in summaries)
+    assert any("2 done" in text for text in summaries), "no report entry"
+    store.close()
+
+
+def test_the_remote_loop_records_claims_on_the_server(remote_base):
+    base, cfg = remote_base
+    from vrusha.config import resolve
+    from vrusha.remote import RemoteBoard
+    from vrusha.store.blackboard import Blackboard
+    from vrusha.store.claims import Claims
+    from vrusha.store.db import Store
+    from vrusha.store.registry import Registry
+
+    store = Store(resolve(cfg, "db"))
+    board = Blackboard(store)
+    orch.run_remote(store, board, Claims(board), Registry(board), cfg, "a",
+                    worker=lambda task: "ok", base_url=base, run_id="r1")
+    second = RemoteBoard(base).claim("r1", "a", "someone-else")
+    assert second["granted"] is False, "the task was left claimable"
+    store.close()
+
+
+def test_a_remote_failure_is_retried_then_marked(remote_base):
+    base, cfg = remote_base
+    from vrusha.config import resolve
+    from vrusha.store.blackboard import Blackboard
+    from vrusha.store.claims import Claims
+    from vrusha.store.db import Store
+    from vrusha.store.registry import Registry
+
+    calls = {"n": 0}
+
+    def flaky(task):
+        calls["n"] += 1
+        raise RuntimeError("down")
+
+    store = Store(resolve(cfg, "db"))
+    board = Blackboard(store)
+    result = orch.run_remote(store, board, Claims(board), Registry(board), cfg, "a",
+                             worker=flaky, base_url=base, run_id="r1")
+    assert result.failed == 1
+    assert calls["n"] == orch.MAX_ATTEMPTS
+    store.close()
+
+
+def test_the_remote_loop_never_exceeds_its_pool(remote_base):
+    base, cfg = remote_base
+    import threading as _threading
+    import time as _time
+
+    from vrusha.config import resolve
+    from vrusha.store.blackboard import Blackboard
+    from vrusha.store.claims import Claims
+    from vrusha.store.db import Store
+    from vrusha.store.registry import Registry
+
+    lock = _threading.Lock()
+    state = {"now": 0, "peak": 0}
+
+    def watcher(task):
+        with lock:
+            state["now"] += 1
+            state["peak"] = max(state["peak"], state["now"])
+        _time.sleep(0.02)
+        with lock:
+            state["now"] -= 1
+        return "ok"
+
+    store = Store(resolve(cfg, "db"))
+    board = Blackboard(store)
+    orch.run_remote(store, board, Claims(board), Registry(board), cfg, "g",
+                    worker=watcher, base_url=base, workers=2,
+                    tasks=[f"t{index}" for index in range(6)], run_id="r1")
+    assert state["peak"] <= 2
+    store.close()
+
+
+def test_an_unreachable_server_fails_the_run_without_hanging(tmp_path):
+    store, board, claims, registry, cfg = _pieces(tmp_path)
+    with pytest.raises(Exception):
+        orch.run_remote(store, board, claims, registry, cfg, "a",
+                        worker=lambda task: "ok",
+                        base_url="http://127.0.0.1:9", run_id="r1")
+    store.close()

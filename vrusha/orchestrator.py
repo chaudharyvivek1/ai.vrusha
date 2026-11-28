@@ -233,3 +233,78 @@ def run_pool(store, board, claims, registry, cfg, goal: str, *,
         result.entries = len(board.since(run_id, 0, limit=1000))
         result.seconds = time.perf_counter() - started
     return result
+
+
+# ---------------------------------------------------------------------------
+# Part 34: the loop over HTTP
+# ---------------------------------------------------------------------------
+
+
+def run_remote(store, board, claims, registry, cfg, goal: str, *,
+               worker: Callable[[str], str], base_url: str,
+               tasks: Optional[Sequence[str]] = None,
+               workers: int = DEFAULT_WORKERS, run_id: str = "",
+               max_tasks: int = 64) -> Run:
+    """The same loop, with every board and claim call going over HTTP.
+
+    This is the shape an L4 agent on another machine takes: it claims from the
+    server, does the work locally, reports back. The local `board`/`claims` objects
+    are used only for the final count, so a caller can pass the server's own.
+
+    **What it costs, measured:** each task now pays three round trips — claim,
+    append, complete — where the in-process loop paid none. `bench/registry.py`
+    reports both, because "remote is slower" is not a number.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    from .remote import RemoteBoard
+
+    started = time.perf_counter()
+    run_id = run_id or f"run-{int(started * 1000)}-{uuid.uuid4().hex[:6]}"
+    names = (list(tasks) if tasks is not None else decompose(goal))[:max_tasks]
+    result = Run(goal=goal, tasks=[Task(name=name) for name in names])
+    if not names:
+        return result
+
+    remote = RemoteBoard(base_url)
+    remote.append(run_id, task="plan", agent="L1/super", kind="decision",
+                  summary=f"goal: {goal[:160]} ({len(names)} task(s), remote)")
+
+    def work(index: int) -> None:
+        task = result.tasks[index]
+        name = f"L4/remote-{index % max(1, workers)}"
+        granted = remote.claim(run_id, task.name, name, ttl=120)
+        if not granted.get("granted"):
+            task.state = "failed"
+            task.error = f"not claimed: {granted.get('reason', '')}"
+            remote.append(run_id, task=task.name, agent=name, kind="error",
+                          summary=task.error)
+            return
+        while task.attempts < MAX_ATTEMPTS:
+            task.attempts += 1
+            try:
+                task.result = worker(task.name) or ""
+                task.state = "done"
+                remote.complete(run_id, task.name, name, status="done")
+                remote.append(run_id, task=task.name, agent=name, kind="finding",
+                              summary=task.result[:400] or "(empty)")
+                return
+            except Exception as exc:             # noqa: BLE001
+                task.error = f"{type(exc).__name__}: {exc}"
+                if task.attempts >= MAX_ATTEMPTS:
+                    task.state = "failed"
+                    remote.complete(run_id, task.name, name, status="failed")
+                    remote.append(run_id, task=task.name, agent=name, kind="error",
+                                  summary=task.error[:400])
+
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, int(workers))) as pool:
+            list(pool.map(work, range(len(result.tasks))))
+    finally:
+        remote.append(run_id, task="report", agent="L2/admin", kind="artifact",
+                      summary=f"{result.done} done, {result.failed} failed "
+                              f"of {len(result.tasks)} (remote, {workers} worker(s))",
+                      refs=[f"run:{run_id}"])
+        result.entries = len(board.since(run_id, 0, limit=1000))
+        result.seconds = time.perf_counter() - started
+    return result
