@@ -90,3 +90,46 @@ def test_render_shows_both_columns(tmp_path):
     assert "single" in text and "orchestrated" in text
     assert "recall@5" in text
     store.close()
+
+
+def test_the_graph_shape_matches_the_stages_shape(tmp_path):
+    """The same plan written two ways must produce the same answer.
+
+    If they disagree, one of the two shapes is wrong -- which is the whole reason
+    to write the general one.
+    """
+    store, cfg, board, claims, registry, embedder = _setup(tmp_path)
+    import uuid as _uuid
+
+    staged = compare.multistep(store, embedder, cfg, board, claims, registry,
+                               ["ann", "rules"], workers=2,
+                               run_id=f"a{_uuid.uuid4().hex[:6]}", shape="stages")
+    graphed = compare.multistep(store, embedder, cfg, board, claims, registry,
+                                ["ann", "rules"], workers=2,
+                                run_id=f"b{_uuid.uuid4().hex[:6]}", shape="graph")
+    assert graphed.orchestrated_facts == staged.orchestrated_facts
+    assert graphed.tasks == staged.tasks
+    store.close()
+
+
+def test_an_unknown_shape_is_refused(tmp_path):
+    store, cfg, board, claims, registry, embedder = _setup(tmp_path)
+    with pytest.raises(ValueError) as error:
+        compare.multistep(store, embedder, cfg, board, claims, registry,
+                          ["ann"], run_id="x", shape="triangle")
+    assert "triangle" in str(error.value)
+    store.close()
+
+
+def test_a_reused_run_id_poisons_the_board(tmp_path):
+    """Why every measurement uses a fresh id: claims are per run, so a second run
+    with the same id finds its tasks already `done` and its board already written.
+    Found by measuring the same run_id twice -- the numbers silently improved."""
+    store, cfg, board, claims, registry, embedder = _setup(tmp_path)
+    first = compare.multistep(store, embedder, cfg, board, claims, registry,
+                              ["ann", "rules"], workers=2, run_id="same")
+    second = compare.multistep(store, embedder, cfg, board, claims, registry,
+                               ["ann", "rules"], workers=2, run_id="same")
+    assert second.board_entries > first.board_entries, \
+        "the second run should show the first run's entries as well"
+    store.close()

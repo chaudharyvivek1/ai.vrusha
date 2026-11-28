@@ -156,7 +156,7 @@ class MultiStep:
 
 def multistep(store, embedder, cfg: dict, board, claims, registry,
               companies: Sequence[str], *, workers: int = 3,
-              run_id: str = "multistep") -> MultiStep:
+              run_id: str = "multistep", shape: str = "stages") -> MultiStep:
     """Research N companies, then compare them -- both ways."""
     from . import orchestrator as orch
     from .store.query import retrieve
@@ -199,14 +199,27 @@ def multistep(store, embedder, cfg: dict, board, claims, registry,
         return f"{task.removeprefix('research ')}: " + research(
             task.removeprefix("research "), on=wstore)[:300]
 
-    # Two stages, because the compare task needs the research to exist first.
-    # A flat `run_pool` raced them and the compare task read an empty board.
-    run_result = orch.run_stages(
-        store, board, claims, registry, cfg, "research and compare",
-        stages=[[f"research {name}" for name in companies],
-                ["compare the findings"]],
-        worker=worker, workers=workers, run_id=run_id,
-        store_factory=getattr(store, "_factory", None))
+    # The compare task needs the research to exist first. `stages` expresses that
+    # as two linear waves; `graph` expresses it as a dependency, which is the same
+    # plan written the general way. Both must produce the same answer -- if they do
+    # not, one of the two shapes is wrong.
+    if shape == "graph":
+        tasks = [(f"research {name}", []) for name in companies]
+        tasks.append(("compare the findings",
+                      [f"research {name}" for name in companies]))
+        run_result = orch.run_graph(
+            store, board, claims, registry, cfg, "research and compare",
+            tasks=tasks, worker=worker, workers=workers, run_id=run_id,
+            store_factory=getattr(store, "_factory", None))
+    elif shape == "stages":
+        run_result = orch.run_stages(
+            store, board, claims, registry, cfg, "research and compare",
+            stages=[[f"research {name}" for name in companies],
+                    ["compare the findings"]],
+            worker=worker, workers=workers, run_id=run_id,
+            store_factory=getattr(store, "_factory", None))
+    else:
+        raise ValueError(f"unknown shape {shape!r}; expected 'stages' or 'graph'")
     result.orchestrated_seconds = time.perf_counter() - started
     result.tasks = len(run_result.tasks)
     result.board_entries = run_result.entries
