@@ -229,7 +229,8 @@ def test_derive_on_a_missing_table_is_a_formula_error(tmp_path):
 
 def test_cli_derive_with_flags(tmp_path, capsys):
     root = str(tmp_path)
-    assert main(["--root", root, "extract", "--dir", FIXTURES, "--licence", "MIT"]) == 0
+    plans = os.path.join(FIXTURES, "plans.html")
+    assert main(["--root", root, "extract", "--dir", plans, "--licence", "MIT"]) == 0
     capsys.readouterr()
 
     assert main(["--root", root, "derive", "--table", "1", "--name", "price_lakh",
@@ -243,7 +244,8 @@ def test_cli_derive_with_flags(tmp_path, capsys):
 
 def test_cli_derive_with_a_spec_file(tmp_path, capsys):
     root = str(tmp_path)
-    assert main(["--root", root, "extract", "--dir", FIXTURES, "--licence", "MIT"]) == 0
+    plans = os.path.join(FIXTURES, "plans.html")
+    assert main(["--root", root, "extract", "--dir", plans, "--licence", "MIT"]) == 0
     spec_path = tmp_path / "formulas.json"
     spec_path.write_text(json.dumps({"derived": [
         {"name": "annual", "expr": "price * 12", "type": "float"}]}), encoding="utf-8")
@@ -255,7 +257,8 @@ def test_cli_derive_with_a_spec_file(tmp_path, capsys):
 
 def test_cli_refuses_a_dangerous_formula_with_exit_1(tmp_path, capsys):
     root = str(tmp_path)
-    assert main(["--root", root, "extract", "--dir", FIXTURES, "--licence", "MIT"]) == 0
+    plans = os.path.join(FIXTURES, "plans.html")
+    assert main(["--root", root, "extract", "--dir", plans, "--licence", "MIT"]) == 0
     capsys.readouterr()
 
     code = main(["--root", root, "derive", "--table", "1", "--name", "x",

@@ -66,6 +66,15 @@ CREATE INDEX IF NOT EXISTS idx_x_rows_table ON x_rows(table_id);
 
 def ensure_schema(store) -> None:
     store.conn.executescript(SCHEMA)
+    # `kind` arrived after the first release of these tables: add it in place
+    # rather than making anyone drop a database to get a column.
+    columns = {row[1] for row in
+               store.conn.execute("PRAGMA table_info(x_tables)").fetchall()}
+    if "kind" not in columns:
+        try:
+            store.conn.execute("ALTER TABLE x_tables ADD COLUMN kind TEXT")
+        except Exception:                       # noqa: BLE001 - already added
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +99,64 @@ def _match_chunk(store, doc_id: int, table: Table) -> Optional[int]:
         "AND instr(text, ?) > 0 ORDER BY chunk_id LIMIT 1",
         (doc_id, probe[:200])).fetchone()
     return int(row[0]) if row else None
+
+
+def store_entity_table(store, table, doc_id: int) -> Optional[Dict[str, object]]:
+    """One schema.org type from a page, as a table with typed columns.
+
+    The page told us what the thing is, so there is no header detection and no
+    junk filter: an entity of type `Product` is a row of `Product`, and the
+    only judgement left is the type of each column.
+    """
+    from .jsonld import coerce, column_type
+
+    ensure_schema(store)
+    if not table.entities:
+        return None
+    columns = table.columns()
+    if not columns:
+        return None
+
+    kinds = {name: column_type([entity.values.get(name)
+                                for entity in table.entities])
+             for name in columns}
+    typed = sum(1 for kind, _unit, _currency in kinds.values() if kind != "text")
+    confidence = typed / max(1, len(columns))
+
+    cursor = store.conn.execute(
+        """INSERT INTO x_tables
+           (doc_id, chunk_id, name, source, n_rows, n_cols, confidence, verdict,
+            extracted, kind)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (doc_id, None, table.type[:120], table.source, len(table.entities),
+         len(columns), round(confidence, 3), "schema.org @type",
+         time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "jsonld"))
+    table_id = int(cursor.lastrowid)
+
+    store.conn.executemany(
+        """INSERT INTO x_columns
+           (table_id, position, name, type, unit, currency, null_rate, samples)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        [(table_id, position, name, kinds[name][0], kinds[name][1],
+          kinds[name][2],
+          round(sum(1 for e in table.entities if e.values.get(name) in (None, ""))
+                / max(1, len(table.entities)), 3),
+          json.dumps([str(e.values.get(name)) for e in table.entities[:3]],
+                     ensure_ascii=False))
+         for position, name in enumerate(columns)])
+
+    store.conn.executemany(
+        "INSERT INTO x_rows (table_id, row_number, data) VALUES (?,?,?)",
+        [(table_id, number,
+          json.dumps({name: coerce(entity.values.get(name), kinds[name][0])
+                      for name in columns},
+                     ensure_ascii=False, default=str))
+         for number, entity in enumerate(table.entities, start=1)])
+
+    return {"table_id": table_id, "name": table.type, "rows": len(table.entities),
+            "kind": "jsonld", "confidence": round(confidence, 3),
+            "columns": [{"name": name, "type": kinds[name][0],
+                         "currency": kinds[name][2]} for name in columns]}
 
 
 def store_table(store, table: Table, doc_id: int, *, name: str = "",
@@ -156,6 +223,7 @@ def extract_path(store, path: str, *, licence: Optional[str] = None,
 
     suffix = os.path.splitext(path)[1].lower()
     raw = _read(path)
+    ensure_schema(store)
     tables: List[Table] = []
     if suffix in (".html", ".htm", ".xhtml"):
         tables = tables_from_html(raw, source=path)
@@ -175,6 +243,10 @@ def extract_path(store, path: str, *, licence: Optional[str] = None,
 
     stored: List[Dict[str, object]] = []
     rejected = 0
+
+    # re-extracting a document must replace its records, not double them
+    store.conn.execute("DELETE FROM x_tables WHERE doc_id = ?", (doc_id,))
+
     for number, table in enumerate(tables, start=1):
         summary = store_table(store, table, doc_id, dayfirst=dayfirst,
                               name=f"{os.path.basename(path)}#{number}")
@@ -182,6 +254,15 @@ def extract_path(store, path: str, *, licence: Optional[str] = None,
             rejected += 1
         else:
             stored.append(summary)
+
+    if suffix in (".html", ".htm", ".xhtml"):
+        from .jsonld import entities as jsonld_entities
+        for entity_table in jsonld_entities(raw, source=path):
+            summary = store_entity_table(store, entity_table, doc_id)
+            if summary is None:
+                rejected += 1
+            else:
+                stored.append(summary)
     store.commit()
 
     if verbose:
@@ -284,7 +365,7 @@ def list_tables(store) -> List[Dict[str, object]]:
     ensure_schema(store)
     rows = store.conn.execute(
         """SELECT t.table_id, t.name, t.n_rows, t.n_cols, t.confidence, t.verdict,
-                  t.chunk_id, d.url, d.licence
+                  t.chunk_id, t.kind, d.url, d.licence
            FROM x_tables t JOIN documents d ON d.doc_id = t.doc_id
            ORDER BY t.table_id""").fetchall()
     output = []
@@ -296,6 +377,7 @@ def list_tables(store) -> List[Dict[str, object]]:
             "table_id": int(row["table_id"]), "name": row["name"],
             "rows": int(row["n_rows"]), "cols": int(row["n_cols"]),
             "confidence": float(row["confidence"]), "verdict": row["verdict"],
+            "kind": row["kind"] or "html-table",
             "chunk_id": row["chunk_id"], "url": row["url"], "licence": row["licence"],
             "columns": [{"name": c["name"], "type": c["type"], "unit": c["unit"]}
                         for c in columns],
