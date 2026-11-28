@@ -559,6 +559,43 @@ def bench_paths() -> Dict[str, float]:
             "hops": float(found["hops"]) if found else 0.0}
 
 
+def bench_graphboost() -> Dict[str, float]:
+    """The graph boost's cost, and whether it has anything to boost."""
+    import tempfile as _tempfile
+
+    from vrusha.store import communities, edges
+    from vrusha.store import graphboost
+    from vrusha.store.db import Store
+    from vrusha.store.query import Hit
+
+    store = Store(_tempfile.mktemp(suffix=".db"))
+    # names prose extraction can actually see (capitalised, with a suffix), so the
+    # query produces a community and the boost has something to do
+    rows = []
+    for index in range(200):
+        rows.append((f"Acme Corporation {index}", f"Acme Corporation {index + 1}"))
+    edges.store_edges(store, [
+        edges.Edge(subject=left, predicate="linked_to", object=right,
+                   sentence=f"{left} linked {right}.", confidence=0.8)
+        for left, right in rows], doc_id=1)
+    store.conn.execute("UPDATE x_edges SET chunk_id = (edge_id % 20) + 1")
+    store.commit()
+    communities.build(store)
+
+    hits = [Hit(chunk_id=index, address=None, text="text", symbol="", kind="prose",
+                lang="en", url=f"https://a.test/{index}", title="t", licence="MIT",
+                scores={"primary": 1.0 - index * 0.01, "fused": 1.0 - index * 0.01})
+            for index in range(1, 21)]
+    query = "Acme Corporation 5"
+    timings = _timeit(lambda: graphboost.boost(store, query, hits), repeats=20)
+    boosted = graphboost.boost(store, query, hits)
+    changed = sum(1 for before, after in zip(hits, boosted)
+                  if before.chunk_id != after.chunk_id)
+    store.close()
+    return {"ms": timings["p50_ms"], "hits": float(len(hits)),
+            "reordered": float(changed), "edges": float(len(rows))}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -575,6 +612,7 @@ BENCHMARKS: List[tuple] = [
     ("edges", bench_edges, "relations with evidence, over the whole corpus"),
     ("communities", bench_communities, "label propagation over a known graph"),
     ("paths", bench_paths, "two-hop search over a chained graph"),
+    ("graphboost", bench_graphboost, "the bounded graph boost over 20 hits"),
 ]
 
 

@@ -447,6 +447,16 @@ def retrieve(store: Store, embedder, query: str, cfg: dict,
             hits = apply_rerank(reranker, query, hits[:window], top_k, result.notes)
             result.reranked_by = getattr(reranker, "name", "")
 
+    # the graph, bounded: it may reorder near-ties and may not overturn a clear
+    # lexical win. Off unless asked for, like every other second signal here.
+    graph_block = (cfg.get("graph", {}) or {})
+    if graph_block.get("boost", False) and hits:
+        from ..store.graphboost import boost as graph_boost
+        hits = graph_boost(store, query, hits,
+                           weight=float(graph_block.get("weight", 0.15)),
+                           max_hits=int(graph_block.get("max_hits", 5)),
+                           notes=result.notes)
+
     result.hits = hits[:top_k]
     return result
 
