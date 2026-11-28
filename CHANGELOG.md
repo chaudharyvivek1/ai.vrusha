@@ -8,6 +8,28 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 56 — Part 32: the bounded worker pool · PR #52
+
+- `vrusha/orchestrator.py` — `run_pool()`, the same loop over a `ThreadPoolExecutor`
+  of `workers` (default 4); every task still claims, works, records and releases
+- `bench/registry.py` — `pool`; `docs/benchmarks/20-pool.md`
+- `tests/test_orchestrator.py` — 5 more tests
+
+**Measured on 8 tasks of 20 ms each:**
+
+| workers | wall clock | speedup |
+|---|---|---|
+| 1 | 238.95 ms | 1.00× |
+| 4 | **64.45 ms** | **3.71×** |
+| 8 | 49.40 ms | 4.84× |
+
+**The curve flattens and the flattening is the finding.** Four workers are close to
+linear; eight give 4.84×, not 8×, because every board write takes one lock — the
+bookkeeping cannot speed up, only the waiting can. `docs/AGENTS.md` says 64 logical
+agents over a *small* pool, and this is the measurement that says small.
+
+---
+
 ## Wave 55 — Part 31: the orchestration loop · PR #51
 
 - `vrusha/orchestrator.py` — L1 plans, L2 decomposes, L3 claims and works, L4

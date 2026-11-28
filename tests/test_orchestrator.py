@@ -156,3 +156,73 @@ def test_render_shows_every_task(tmp_path):
     text = orch.render(result)
     assert "a" in text and "b" in text and "2 done" in text
     store.close()
+
+
+# ---------------------------------------------------------------------------
+# Part 32: the bounded pool
+# ---------------------------------------------------------------------------
+
+
+def test_the_pool_completes_every_task(tmp_path):
+    store, board, claims, registry, cfg = _pieces(tmp_path)
+    result = orch.run_pool(store, board, claims, registry, cfg, "a then b then c",
+                           worker=lambda task: f"did {task}", workers=3,
+                           run_id="r1")
+    assert result.done == 3 and result.failed == 0
+    store.close()
+
+
+def test_the_pool_never_exceeds_its_size(tmp_path):
+    """The bound is the point: 64 logical agents over a small pool."""
+    import threading
+    import time as _time
+
+    lock = threading.Lock()
+    state = {"now": 0, "peak": 0}
+
+    def watcher(task):
+        with lock:
+            state["now"] += 1
+            state["peak"] = max(state["peak"], state["now"])
+        _time.sleep(0.02)
+        with lock:
+            state["now"] -= 1
+        return "ok"
+
+    store, board, claims, registry, cfg = _pieces(tmp_path)
+    orch.run_pool(store, board, claims, registry, cfg, "g", worker=watcher,
+                  tasks=[f"t{index}" for index in range(8)], workers=2,
+                  run_id="r1")
+    assert state["peak"] <= 2, f"{state['peak']} workers ran at once, cap was 2"
+    store.close()
+
+
+def test_a_failure_in_the_pool_does_not_stop_the_others(tmp_path):
+    def half(task):
+        if task == "bad":
+            raise RuntimeError("boom")
+        return "ok"
+
+    store, board, claims, registry, cfg = _pieces(tmp_path)
+    result = orch.run_pool(store, board, claims, registry, cfg, "g", worker=half,
+                           tasks=["a", "bad", "c"], workers=3, run_id="r1")
+    assert result.done == 2 and result.failed == 1
+    store.close()
+
+
+def test_the_pool_writes_one_report(tmp_path):
+    store, board, claims, registry, cfg = _pieces(tmp_path)
+    orch.run_pool(store, board, claims, registry, cfg, "a then b",
+                  worker=lambda task: "ok", workers=2, run_id="r1")
+    reports = [entry for entry in board.since("r1", 0, limit=100)
+               if entry.kind == "artifact"]
+    assert len(reports) == 1
+    store.close()
+
+
+def test_the_pool_releases_every_slot(tmp_path):
+    store, board, claims, registry, cfg = _pieces(tmp_path)
+    orch.run_pool(store, board, claims, registry, cfg, "a then b then c",
+                  worker=lambda task: "ok", workers=3, run_id="r1")
+    assert registry.summary("r1")["live"] == 0
+    store.close()
