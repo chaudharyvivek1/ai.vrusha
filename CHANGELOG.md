@@ -8,6 +8,28 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 55 — Part 31: the orchestration loop · PR #51
+
+- `vrusha/orchestrator.py` — L1 plans, L2 decomposes, L3 claims and works, L4
+  reports; the worker is **injected**, so the loop is tested without a model or a
+  network; one retry then failed; every task ends in a state on the board and in
+  the claims
+- `bench/registry.py` — `orchestrator`; `docs/benchmarks/19-orchestrator.md`
+- `tests/test_orchestrator.py` — 14 tests
+
+**Measured:** the loop's own overhead is **7 ms per task** with a worker that does
+nothing — against a 9 ms retrieval, so bookkeeping is comparable to work at this
+scale.
+
+**The bug the benchmark found:** `run_id` was `f"run-{int(time.perf_counter())}"`,
+which **collides for every run in the same second**. The second run found the first
+one's claims already `done`, was refused, and marked every task failed. The unit
+tests never saw it because each passes an explicit `run_id`. **A test suite that
+supplies its own ids cannot catch an id collision** — that is what a benchmark
+harness is for.
+
+---
+
 ## Wave 54 — Part 30: anticipation, Phase 5 closed · PR #50
 
 - `vrusha/store/anticipate.py` — `predict()` (open questions, then unclaimed tasks),

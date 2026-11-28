@@ -656,6 +656,36 @@ def bench_anticipate() -> Dict[str, float]:
             "budget_ms": anticipate.BUDGET_MS, "max_tasks": float(anticipate.MAX_TASKS)}
 
 
+def bench_orchestrator() -> Dict[str, float]:
+    """What the loop itself costs, with the worker doing nothing."""
+    from vrusha import orchestrator as orch
+    from vrusha.config import DEFAULTS, ensure_dirs, resolve
+    from vrusha.store.blackboard import Blackboard
+    from vrusha.store.claims import Claims
+    from vrusha.store.db import Store
+    from vrusha.store.registry import Registry
+
+    cfg = {key: (dict(value) if isinstance(value, dict) else value)
+           for key, value in DEFAULTS.items()}
+    cfg["paths"] = dict(DEFAULTS["paths"])
+    cfg["paths"]["root"] = tempfile.mkdtemp()
+    ensure_dirs(cfg)
+    store = Store(resolve(cfg, "db"))
+    board = Blackboard(store)
+    claims = Claims(board)
+    registry = Registry(board)
+    tasks = [f"task-{index}" for index in range(10)]
+    timings = _timeit(lambda: orch.run(store, board, claims, registry, cfg,
+                                       "benchmark", worker=lambda name: "ok",
+                                       tasks=tasks), repeats=3)
+    result = orch.run(store, board, claims, registry, cfg, "benchmark",
+                      worker=lambda name: "ok", tasks=tasks)
+    store.close()
+    return {"tasks": float(len(tasks)), "ms": timings["p50_ms"],
+            "ms_per_task": timings["p50_ms"] / len(tasks),
+            "done": float(result.done)}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -675,6 +705,7 @@ BENCHMARKS: List[tuple] = [
     ("graphboost", bench_graphboost, "the bounded graph boost over 20 hits"),
     ("compaction", bench_compaction, "fold a run into a verified summary"),
     ("anticipate", bench_anticipate, "the prefetch cache: put, hit, miss"),
+    ("orchestrator", bench_orchestrator, "the loop's own overhead per task"),
 ]
 
 
