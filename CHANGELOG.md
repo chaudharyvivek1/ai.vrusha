@@ -8,6 +8,33 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 37 — Part 1: the metrics · PR #33
+
+The first of the forty parts in `docs/PLAN-V3.md`, and the one everything else is
+judged by.
+
+- `vrusha/evaluate.py` — recall@k, precision@k, MRR, **nDCG@k**, passage@k,
+  **citation accuracy**, **faithfulness** (as a labelled proxy), and a summary
+  renderer that defines every number beside it
+- `vrusha evaluate [--answers] [--json] [--verbose]`
+- `docs/EVALUATE.md`; `tests/test_evaluate.py` — 23 tests against hand arithmetic
+
+**The first measured numbers for the whole pipeline**, on this repository's own
+documentation: recall@1 **25%**, recall@5 **75%**, MRR **0.390**, nDCG@10 **51%**,
+passage@5 **42%**. Worse than the retrieval-only figures in `BENCHMARKS.md`, which
+is the point of measuring.
+
+**Two numbers deliberately not numbers.** Citation accuracy prints `n/a` when
+nothing was cited — the code returns `None`, because "cited nothing" and "cited
+the wrong thing" are different failures. Faithfulness is a lexical proxy and is
+labelled one everywhere.
+
+**Bugs found by running it:** the table printed `citation_accuracy 0%` for a run
+that cited nothing (the exact confusion the `None` exists to prevent), and
+`--verbose` collided with the shared parent parser.
+
+---
+
 ## Wave 36 — Plan V3: the review, the repo, and forty parts · PR #32
 
 An outside review of the repository (28 November 2026) was read in full and
