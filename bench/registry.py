@@ -686,6 +686,53 @@ def bench_orchestrator() -> Dict[str, float]:
             "done": float(result.done)}
 
 
+def bench_pool() -> Dict[str, float]:
+    """Does the pool help, or does it contend on one writer?
+
+    The worker sleeps, so the measurement is about overlap rather than CPU. A
+    single-writer blackboard means the bookkeeping cannot speed up; only the
+    waiting can.
+    """
+    import time as _time
+
+    from vrusha import orchestrator as orch
+    from vrusha.config import DEFAULTS, ensure_dirs, resolve
+    from vrusha.store.blackboard import Blackboard
+    from vrusha.store.claims import Claims
+    from vrusha.store.db import Store
+    from vrusha.store.registry import Registry
+
+    cfg = {key: (dict(value) if isinstance(value, dict) else value)
+           for key, value in DEFAULTS.items()}
+    cfg["paths"] = dict(DEFAULTS["paths"])
+    cfg["paths"]["root"] = tempfile.mkdtemp()
+    ensure_dirs(cfg)
+    store = Store(resolve(cfg, "db"))
+    board = Blackboard(store)
+    claims = Claims(board)
+    registry = Registry(board)
+
+    def slow(name: str) -> str:
+        _time.sleep(0.02)
+        return f"did {name}"
+
+    tasks = [f"t{index}" for index in range(8)]
+    numbers = {}
+    baseline = 0.0
+    for workers in (1, 2, 4, 8):
+        started = time.perf_counter()
+        result = orch.run_pool(store, board, claims, registry, cfg, "pool",
+                               worker=slow, tasks=tasks, workers=workers)
+        elapsed = (time.perf_counter() - started) * 1000.0
+        numbers[f"w{workers}_ms"] = elapsed
+        numbers[f"w{workers}_done"] = float(result.done)
+        if workers == 1:
+            baseline = elapsed
+    numbers["speedup"] = baseline / max(1e-9, numbers["w4_ms"])
+    store.close()
+    return numbers
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -706,6 +753,7 @@ BENCHMARKS: List[tuple] = [
     ("compaction", bench_compaction, "fold a run into a verified summary"),
     ("anticipate", bench_anticipate, "the prefetch cache: put, hit, miss"),
     ("orchestrator", bench_orchestrator, "the loop's own overhead per task"),
+    ("pool", bench_pool, "1, 2, 4 and 8 workers on the same 8 tasks"),
 ]
 
 
