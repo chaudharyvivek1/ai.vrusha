@@ -8,6 +8,33 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 65 — a corpus that is not documentation · PR #62
+
+Three parts ended with "this corpus cannot exercise it" — Parts 23, 26 and 35. That
+was a statement about *documentation*, not about the code.
+
+- `examples/corpora/wiki-companies/` — **15 Wikipedia company articles**, 154 KB of
+  real prose, fetched reproducibly (the API rate-limits at 429 after ~10 titles)
+- `bench/registry.py` — `graph_real`; `docs/benchmarks/29-graph-real.md`
+- `vrusha/store/prose.py` — leading prepositions and month names stripped from a run
+
+**The measurement:** 2,658 entities, **124 edges**, **7 predicates**, 159 nodes,
+**45 communities** — against **0 edges** on the same code with `docs/`.
+
+**The graph works. It was the corpus that had no relations.**
+
+**A bug found in ten minutes:** `In April Adani Defence Systems` — a leading
+preposition and month were part of the entity name. Technical prose never produces a
+run long enough to expose it. Fourth time in this programme that new material found
+what the tests could not.
+
+**Still wrong, and now visible:** runs can cross a clause boundary
+(`PLR Systems On September Adani`); one entity appears at two lengths, which is
+exactly what `entities.resolve` was built for and never wired in; the person
+extractor finds 1 in 154 KB.
+
+---
+
 ## Wave 64 — Part 40: fuzzing, and the programme closed · PR #61
 
 - `tests/test_fuzz.py` — **44 fuzz cases** across HTML extraction, CSV, JSON-LD, the

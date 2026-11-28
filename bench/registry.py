@@ -943,6 +943,40 @@ def bench_fuzz() -> Dict[str, float]:
             "per_second": len(payloads) / max(1e-9, seconds)}
 
 
+def bench_graph_real() -> Dict[str, float]:
+    """The graph parts on a corpus that has relations in it.
+
+    `docs/` is technical prose, so `edges` reports **0** and Parts 23, 26 and 35
+    all concluded "this corpus cannot exercise it". This benchmark runs the same
+    code on 15 Wikipedia company articles, where the patterns actually fire.
+    """
+    from vrusha.store import communities, edges as edges_mod, paths, prose
+
+    directory = os.path.join(ROOT, "examples", "corpora", "wiki-companies")
+    text = "\n".join(
+        open(os.path.join(directory, name), encoding="utf-8").read()
+        for name in sorted(os.listdir(directory)))
+    entities = prose.extract(text)
+    relations = edges_mod.extract(text)
+    graph = communities.adjacency((edge.subject, edge.object) for edge in relations)
+    labels = communities.propagate(graph)
+    summary = communities.summarise(labels, graph)
+    pairs = [(edge.subject, edge.object) for edge in relations]
+    hops = 0.0
+    if pairs:
+        start = pairs[0][0].lower()
+        goal = pairs[-1][1].lower()
+        found = paths.find_path_for(pairs, start, goal, max_hops=3) \
+            if hasattr(paths, "find_path_for") else None
+        hops = float(found["hops"]) if found else 0.0
+    return {"articles": 15.0, "chars": float(len(text)),
+            "entities": float(len(entities)), "edges": float(len(relations)),
+            "nodes": float(summary["nodes"]),
+            "communities": float(summary["communities"]),
+            "predicates": float(len({e.predicate for e in relations})),
+            "hops": hops}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -972,6 +1006,7 @@ BENCHMARKS: List[tuple] = [
     ("beir", bench_beir, "reading a BEIR set and scoring one query"),
     ("safety", bench_safety, "scanning a page for instructions"),
     ("fuzz", bench_fuzz, "rubbish through the parsers, and whether it crashes"),
+    ("graph_real", bench_graph_real, "the graph parts on a corpus with relations"),
 ]
 
 
