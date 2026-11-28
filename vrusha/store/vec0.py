@@ -116,8 +116,13 @@ class Vec0Backend(Backend):
         if not self.available():
             raise RuntimeError("no vec0 index: `vrusha index build --engine sqlite-vec`")
         if filter:
-            # the store filters after retrieval; vec0 has no filter language here
-            pass
+            # The router never sends a filtered query here -- `filter` is a
+            # capability, and this backend does not declare it. A direct caller
+            # might, and silently returning unfiltered rows would be a wrong
+            # answer that looks like a right one.
+            raise RuntimeError(
+                "sqlite-vec cannot apply a filter; the router sends filtered "
+                "queries to a backend that can. Use `exact` or `ragforge`.")
         query = np.asarray(vector, dtype=np.float32).ravel()
         rows = self._connect().execute(
             "SELECT chunk_id, distance FROM vec_chunks "

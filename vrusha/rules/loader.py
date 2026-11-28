@@ -37,7 +37,7 @@ import glob
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional
 
 LEVELS: Dict[int, str] = {
     1: "inviolable",

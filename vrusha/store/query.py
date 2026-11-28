@@ -23,7 +23,7 @@ from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
-from .address import Address, centroid_table, semantic_similarity
+from .address import Address, centroid_table
 from .ann import AnnConfig, AnnError, load_for as _ann_load
 from .db import Store
 

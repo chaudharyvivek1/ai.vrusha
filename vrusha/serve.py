@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Optional
 
 import numpy as np
 
@@ -149,10 +148,14 @@ class _Handler(BaseHTTPRequestHandler):
             table_id = int(ident)
         except ValueError:
             return self._send(400, {"error": f"not a table id: {ident!r}"})
-        rows = table_rows(self.server.store, table_id, limit=500)
-        if not rows:
+        exists = self.server.store.conn.execute(
+            "SELECT 1 FROM x_tables WHERE table_id = ?", (table_id,)).fetchone()
+        if exists is None:
             return self._send(404, {"error": f"no table {table_id}"})
-        return self._send(200, {"table_id": table_id, "rows": rows})
+        # a table that exists but has no rows is a fact, not a 404
+        rows = table_rows(self.server.store, table_id, limit=500)
+        return self._send(200, {"table_id": table_id, "rows": rows,
+                                "rows_returned": len(rows)})
 
     def _entities(self):
         from .store import entities

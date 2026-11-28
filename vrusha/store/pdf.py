@@ -25,7 +25,7 @@ from __future__ import annotations
 import re
 import zlib
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Sequence, Tuple
 
 from .extract import Table
 

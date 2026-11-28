@@ -8,6 +8,28 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 31 — second audit of the whole package · PR #27
+
+Run before designing the next phase: static analysis, every command by hand on a
+fresh store, and the edge paths a happy-path test never touches.
+
+- `docs/AUDIT-2.md` — what was checked, what was fixed, what was investigated and
+  is *not* a bug, and what this audit does not cover
+- `harvest/net.py` — a **duplicate `decompress_capped`**, 69 lines of dead code
+  that had been shadowed since the refactor extracted `gunzip_members`
+- `store/vec0.py` — a `filter` was accepted and ignored; it now raises
+- `serve.py` — `GET /tables/<id>` no longer answers 404 for a table that exists
+  and is empty
+- 49 unused imports removed across 28 files
+
+**The one that looked like a bug and was not:** `entities._surfaces()` counts key
+*columns*, not rows. A column with repeats is not a key candidate at all, so the
+two counts are always equal — the expensive version was reverted and the
+**docstring** was fixed instead. The audit records the reasoning, because a
+finding that turns out to be wrong is still a finding.
+
+---
+
 ## Wave 30 — the agent fabric, designed · PR #26
 
 The plan for four levels of agent, sixty-four at a time, with one shared board.

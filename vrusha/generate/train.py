@@ -15,11 +15,10 @@ import math
 import os
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 from ..tokens.dataset import batch_iterator, read_manifest
 from .model import ModelConfig, TinyLM, build_model

@@ -22,11 +22,10 @@ merges two companies into one.
 from __future__ import annotations
 
 import json
-import os
 import re
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import List, Sequence, Set, Tuple
 
 from .extract import ascii_digits
 

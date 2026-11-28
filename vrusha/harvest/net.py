@@ -23,7 +23,6 @@ Nothing in this module reads a file or touches the store.
 """
 from __future__ import annotations
 
-import gzip
 import http.client
 import ipaddress
 import socket
@@ -33,7 +32,7 @@ import urllib.request
 import zlib
 from dataclasses import dataclass
 from functools import partial
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Iterable, Optional, Tuple
 from urllib.parse import urlsplit
 
 #: Schemes the harvester will ever request. `file` is here because the offline
@@ -316,75 +315,6 @@ def build_opener(allow_private: bool = False,
 # ---------------------------------------------------------------------------
 
 _CHUNK = 64 * 1024
-
-
-def decompress_capped(raw: bytes, encoding: str,
-                      limit: int = DEFAULT_MAX_DECOMPRESSED) -> bytes:
-    """Decompress `raw`, refusing to produce more than `limit` bytes.
-
-    The cap is enforced *during* decompression, not after: `zlib` is given a
-    `max_length` on every call, so a 1 KB body that expands to 1 GB allocates
-    at most `limit` bytes before this raises. Checking the size afterwards
-    would mean allocating the bomb first, which is the attack.
-    """
-    encoding = (encoding or "").strip().lower()
-    if encoding in ("", "identity"):
-        if len(raw) > limit:
-            raise ResponseTooLarge(
-                f"body is {len(raw)} bytes, above the {limit}-byte limit")
-        return raw
-
-    if encoding in ("gzip", "x-gzip"):
-        wbits = 16 + zlib.MAX_WBITS
-    elif encoding == "deflate":
-        # 'deflate' is zlib-wrapped by the spec and raw-deflate in the wild.
-        for candidate in (zlib.MAX_WBITS, -zlib.MAX_WBITS):
-            try:
-                return _inflate(raw, candidate, limit)
-            except zlib.error:
-                continue
-        raise DecompressionError("deflate body is neither zlib nor raw-deflate")
-    elif encoding in ("br", "zstd"):
-        raise DecompressionError(
-            f"content-encoding {encoding!r} is not supported; ask for gzip")
-    else:
-        raise DecompressionError(f"unknown content-encoding {encoding!r}")
-
-    return _inflate(raw, wbits, limit)
-
-
-def _inflate(raw: bytes, wbits: int, limit: int) -> bytes:
-    try:
-        engine = zlib.decompressobj(wbits)
-    except zlib.error as exc:                     # pragma: no cover - defensive
-        raise DecompressionError(f"cannot start decompression: {exc}") from exc
-
-    out = bytearray()
-    view = memoryview(raw)
-    for start in range(0, len(view), _CHUNK):
-        chunk = bytes(view[start:start + _CHUNK])
-        while chunk:
-            room = limit - len(out) + 1           # +1 so we can detect overflow
-            try:
-                out += engine.decompress(chunk, room)
-            except zlib.error as exc:
-                raise DecompressionError(f"malformed compressed body: {exc}") from exc
-            if len(out) > limit:
-                raise ResponseTooLarge(
-                    f"decompressed body exceeds the {limit}-byte limit "
-                    f"(refused during decompression, not after)")
-            chunk = engine.unconsumed_tail
-            if not chunk:
-                break
-    try:
-        out += engine.flush()
-    except zlib.error as exc:
-        raise DecompressionError(f"truncated compressed body: {exc}") from exc
-    if len(out) > limit:
-        raise ResponseTooLarge(f"decompressed body exceeds the {limit}-byte limit")
-    if not engine.eof:
-        raise DecompressionError("compressed body ended before the stream did")
-    return bytes(out)
 
 
 def decompress_capped(raw: bytes, encoding: str,

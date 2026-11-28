@@ -207,3 +207,24 @@ def test_cli_entities_build_then_list(tmp_path, capsys):
 def test_cli_entities_before_a_build_says_what_to_do(tmp_path, capsys):
     assert main(["--root", str(tmp_path), "entities"]) == 0
     assert "entities --build" in capsys.readouterr().out
+
+
+def test_a_column_with_repeats_is_not_a_key_so_surfaces_counts_columns(tmp_path):
+    """The distinction that looked like a bug and is not.
+
+    `surfaces` counts how many *key columns* contain a spelling. A column with
+    repeats is not a key candidate at all, so "rows" and "columns" are the same
+    number here -- which is why the cheap set-based count is the right one.
+    """
+    store = _store(tmp_path, [
+        _table(["vendor", "price"], [["Acme Corp", "Rs 1"],
+                                     ["Acme Corp", "Rs 2"],
+                                     ["Acme Corp", "Rs 3"],
+                                     ["Beta Ltd", "Rs 4"]]),
+        _table(["vendor", "uptime"], [["ACME Corporation", "99%"],
+                                      ["Gamma Inc", "98%"]]),
+    ])
+    counts = entities._surfaces(store)
+    assert "acme corp" not in counts, "a repeated value is not a key"
+    assert counts["acme corporation"] == 1
+    store.close()

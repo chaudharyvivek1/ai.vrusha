@@ -21,12 +21,10 @@ string, and a system that guesses it will eventually be confidently wrong.
 """
 from __future__ import annotations
 
-import json
-import os
 import re
 import time
 from collections import Counter, defaultdict
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from . import relations
 
@@ -105,7 +103,12 @@ def ensure_schema(store) -> None:
 
 
 def _surfaces(store) -> Dict[str, int]:
-    """Normalised value -> how many times it appears across key columns."""
+    """Normalised value -> how many key columns contain it.
+
+    Not "how many rows": a key column has unique values by definition, so the
+    two counts are always the same number. Counting the set is O(1) per value;
+    reading every row to arrive at the same answer would be a worse trade.
+    """
     counts: Counter = Counter()
     for candidate in relations.candidates(store):
         for value in candidate.values:

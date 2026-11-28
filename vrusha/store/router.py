@@ -29,7 +29,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from .backends import (BM25, FILTER, SORT, Backend, free_ram_mb,
+from .backends import (FILTER, SORT, Backend, free_ram_mb,
                        build_backends)
 
 Hit = Tuple[int, float]
