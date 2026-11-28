@@ -1079,7 +1079,8 @@ def cmd_evaluate(args, cfg, rules, registry) -> int:
     try:
         outcomes = evaluate.run(store, _embedder(cfg), cfg, items,
                                 top_k=args.top_k,
-                                with_answers=args.answers)
+                                with_answers=args.answers,
+                                rerank_off=args.no_rerank)
     except RuntimeError as exc:
         print(f"evaluate: {exc}")
         return 1
@@ -1509,6 +1510,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--top-k", type=int, default=5)
     p.add_argument("--answers", action="store_true",
                    help="also compose answers, to measure citation accuracy")
+    p.add_argument("--no-rerank", action="store_true",
+                   help="measure without the second stage, for a like-for-like "
+                        "comparison")
     p.set_defaults(func=cmd_evaluate)
 
     p = sub.add_parser("agents", parents=[common],

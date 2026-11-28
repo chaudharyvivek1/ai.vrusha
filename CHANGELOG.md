@@ -8,6 +8,30 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 40 — Part 14: the reranker seam · PR #36
+
+Phase 2 begins. A seam, not a reranker: a protocol, a no-op default, a registry,
+and three safety rules.
+
+- `vrusha/rerank.py` — `Reranker` protocol, `NoOpReranker`, `RERANKERS` registry,
+  `build_reranker(cfg)`, `apply()`
+- `retrieve(..., reranker=, rerank_off=)`; `vrusha evaluate --no-rerank`
+- `tests/test_rerank.py` — 15 tests
+
+**Three rules, because a second stage is a new failure mode in the query path:** a
+reranker may reorder and drop but may not **invent** a hit it was not given; a
+reranker that raises degrades to the fused order with a note; and `rerank_off`
+beats both the config and an explicitly passed reranker, because a comparison that
+can be overridden is not a comparison.
+
+**The acceptance test passes:** the no-op produces byte-identical results, and
+`reranked_by` stays empty — a no-op is not a reranker that ran.
+
+**Bug found by the test:** `rerank_off` only suppressed the *configured*
+reranker, not one passed in explicitly.
+
+---
+
 ## Wave 39 — Part 4: cost accounting · PR #35
 
 Phase 0 is complete: quality is measured on 40 questions, and cost is measured on
