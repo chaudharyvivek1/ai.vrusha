@@ -167,72 +167,24 @@ def run_pool(store, board, claims, registry, cfg, goal: str, *,
              worker: Callable[[str], str], tasks: Optional[Sequence[str]] = None,
              workers: int = DEFAULT_WORKERS, run_id: str = "",
              max_tasks: int = 64) -> Run:
-    """The same loop, with the tasks spread over a bounded pool.
+    """Every task in one wave: the pool with no ordering.
+
+    **This is `run_stages` with a single stage**, and it used to be a copy. The two
+    `work()` bodies were byte-identical, and editing one silently edited the other
+    three times in three waves -- a stray `threading.local()` block, a stray
+    `skip_if` block, and a missing `store_factory`. A refactor removes the class of
+    error rather than the instance.
 
     Every board write takes one lock, so a pool does not make the *bookkeeping*
-    faster — it makes the *worker* overlap, which only helps if the worker waits on
+    faster -- it makes the *worker* overlap, which only helps if the worker waits on
     something. The benchmark measures both, because "parallel is faster" is an
     assumption that a single-writer store can quietly falsify.
     """
-    from concurrent.futures import ThreadPoolExecutor
-
-    started = time.perf_counter()
-    run_id = run_id or f"run-{int(started * 1000)}-{uuid.uuid4().hex[:6]}"
     names = (list(tasks) if tasks is not None else decompose(goal))[:max_tasks]
-    result = Run(goal=goal, tasks=[Task(name=name) for name in names])
     if not names:
-        return result
-
-    registry.open_run(run_id)
-    registry.register(run_id, "L1/super", level="L1", skill="plan")
-    registry.register(run_id, "L2/admin", level="L2", skill="decompose")
-    board.append(run_id, task="plan", agent="L1/super", kind="decision",
-                 summary=f"goal: {goal[:160]} ({len(names)} task(s), "
-                         f"{workers} worker(s))")
-
-    def work(index: int) -> None:
-        task = result.tasks[index]
-        name = f"L3/worker-{index % max(1, workers)}"
-        registry.register(run_id, name, level="L3", skill="work")
-        granted = claims.claim(run_id, task.name, name, ttl=120)
-        if not granted.granted:
-            task.state, task.error = "failed", f"not claimed: {granted.reason}"
-            board.append(run_id, task=task.name, agent=name, kind="error",
-                         summary=task.error)
-            return
-        try:
-            while task.attempts < MAX_ATTEMPTS:
-                task.attempts += 1
-                try:
-                    task.result = worker(task.name) or ""
-                    task.state = "done"
-                    claims.complete(run_id, task.name, name, status="done")
-                    board.append(run_id, task=task.name, agent=name, kind="finding",
-                                 summary=task.result[:400] or "(empty)")
-                    return
-                except Exception as exc:         # noqa: BLE001
-                    task.error = f"{type(exc).__name__}: {exc}"
-                    if task.attempts >= MAX_ATTEMPTS:
-                        task.state = "failed"
-                        claims.complete(run_id, task.name, name, status="failed")
-                        board.append(run_id, task=task.name, agent=name,
-                                     kind="error", summary=task.error[:400])
-        finally:
-            registry.release(run_id, name)
-
-    try:
-        with ThreadPoolExecutor(max_workers=max(1, int(workers))) as pool:
-            list(pool.map(work, range(len(result.tasks))))
-    finally:
-        board.append(run_id, task="report", agent="L2/admin", kind="artifact",
-                     summary=f"{result.done} done, {result.failed} failed "
-                             f"of {len(result.tasks)} ({workers} worker(s))",
-                     refs=[f"run:{run_id}"])
-        registry.release(run_id, "L1/super")
-        registry.release(run_id, "L2/admin")
-        result.entries = len(board.since(run_id, 0, limit=1000))
-        result.seconds = time.perf_counter() - started
-    return result
+        return Run(goal=goal)
+    return run_stages(store, board, claims, registry, cfg, goal, stages=[names],
+                      worker=worker, workers=workers, run_id=run_id)
 
 
 # ---------------------------------------------------------------------------

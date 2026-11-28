@@ -8,6 +8,28 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 73 — one loop instead of two · PR #70
+
+- `vrusha/orchestrator.py` — `run_pool` is now a **24-line wrapper** over `run_stages`
+  with a single wave, instead of a **72-line copy**
+
+**Why:** the two `work()` bodies were byte-identical, and editing one silently edited
+the other **three times in three waves** — a stray `threading.local()` block, a stray
+`skip_if` block, and a missing `store_factory`. A refactor removes the class of error;
+the earlier fixes removed the instances.
+
+**Verified:** 41 orchestrator tests, plus `test_compare`, `test_remote` and
+`test_benchmarks` — all pass.
+
+**The false alarm, and it matters:** the first benchmark read **254 ms** against the
+**69.6 ms** recorded in wave 55, reproduced three times. It was the pod. A/B on the
+same machine: old **627 / 474 ms**, new **438 ms** — same code, 7× the time of the pod
+that produced the 69.6 ms figure. **A benchmark number is only comparable on the
+machine that produced it**, and a refactor is not a performance change until old and
+new are timed side by side.
+
+---
+
 ## Wave 72 — the graph on the real goal · PR #69
 
 - `vrusha/compare.py` — `multistep(..., shape="stages"|"graph")`, so the company
