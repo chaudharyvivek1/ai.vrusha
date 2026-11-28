@@ -228,3 +228,52 @@ def test_a_column_with_repeats_is_not_a_key_so_surfaces_counts_columns(tmp_path)
     assert "acme corp" not in counts, "a repeated value is not a key"
     assert counts["acme corporation"] == 1
     store.close()
+
+
+# ---------------------------------------------------------------------------
+# canonical_map: resolution for a plain list of names, not store tables
+# ---------------------------------------------------------------------------
+
+
+def test_two_spellings_of_one_company_map_to_one_name():
+    from vrusha.store import entities as module
+
+    # keyed by the ORIGINAL spelling, because that is what a caller holds
+    mapping = module.canonical_map(["Acme Corp", "ACME Corporation"])
+    assert mapping == {"Acme Corp": "ACME Corporation"}
+
+
+def test_a_bare_suffix_is_not_merged_into_a_company():
+    """`Technologies` could belong to a dozen companies; 45.3 < the 90 threshold.
+
+    Found on a real corpus: the resolver refuses, and refusing is correct. The
+    duplicate is an extraction artefact, not a resolution failure.
+    """
+    from vrusha.store import entities as module
+
+    mapping = module.canonical_map(["Alpha Design Technologies Pvt Ltd",
+                                    "Technologies"])
+    assert mapping == {}, "a bare suffix was merged into a company"
+
+
+def test_a_single_name_has_no_mapping():
+    from vrusha.store import entities as module
+
+    assert module.canonical_map(["Only One Ltd"]) == {}
+
+
+def test_an_empty_list_has_no_mapping():
+    from vrusha.store import entities as module
+
+    assert module.canonical_map([]) == {}
+
+
+def test_the_graph_uses_the_mapping(tmp_path):
+    """The wiring: two spellings of one company make one edge, not two."""
+    from vrusha.store import edges as module
+
+    text = ("Acme Corporation acquired Beta Limited. "
+            "ACME Corporation acquired Gamma Industries.")
+    found = module.extract(text)
+    subjects = {edge.subject.lower() for edge in found}
+    assert len(subjects) == 1, f"the graph kept {subjects}"

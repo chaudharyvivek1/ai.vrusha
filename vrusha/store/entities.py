@@ -204,6 +204,80 @@ def resolve(store, *, threshold: float = DEFAULT_THRESHOLD,
     return entities
 
 
+def canonical_map(values: Sequence[str], *, threshold: float = DEFAULT_THRESHOLD,
+                  min_size: int = 2) -> Dict[str, str]:
+    """original name -> canonical name, for a plain list of names.
+
+    `resolve()` reads key columns out of the store, which is right for tables and
+    useless for a graph built from prose. This is the same algorithm — normalise,
+    block on three characters, score with `_ratio`, merge with union-find, pick the
+    member closest to the rest — applied to whatever names a caller has.
+
+    **The mapping is keyed by the ORIGINAL spelling**, because that is what a caller
+    holds. The first version keyed it by the normalised form and returned `{}` when
+    two spellings normalised identically (`Acme Corp` and `ACME Corporation` both
+    become `acme corporation`) — so the one case it exists for produced no mapping
+    at all.
+    """
+    originals: Dict[str, str] = {}
+    for value in values:
+        text = (value or "").strip()
+        if text and text not in originals:
+            originals[text] = _surface(text)
+    if len(originals) < 2:
+        return {}
+
+    by_clean: Dict[str, List[str]] = defaultdict(list)
+    for original, clean in originals.items():
+        if clean:
+            by_clean[clean].append(original)
+
+    # names that normalise identically are already one entity
+    mapping: Dict[str, str] = {}
+    for clean, group in by_clean.items():
+        if len(group) < 2:
+            continue
+        canonical = max(group, key=lambda item: (len(item), item))
+        for original in group:
+            if original != canonical:
+                mapping[original] = canonical
+
+    # and names that are merely close, blocked on the cleaned form
+    cleaned = sorted({clean for clean in originals.values() if clean})
+    blocks: Dict[str, List[str]] = defaultdict(list)
+    for clean in cleaned:
+        blocks[_block_key(clean)].append(clean)
+
+    union = _Union()
+    for members in blocks.values():
+        if len(members) < 2:
+            continue
+        for index, first in enumerate(members):
+            for second in members[index + 1:]:
+                if _ratio(first, second) >= threshold:
+                    union.union(first, second)
+
+    groups: Dict[str, List[str]] = defaultdict(list)
+    for clean in cleaned:
+        groups[union.find(clean)].append(clean)
+    for members in groups.values():
+        if len(members) < min_size:
+            continue
+
+        def closeness(clean: str) -> Tuple[float, int]:
+            others = [other for other in members if other != clean]
+            total = sum(_ratio(clean, other) for other in others) / max(1, len(others))
+            return (total, len(clean))
+
+        best = max(members, key=closeness)
+        canonical = max(by_clean.get(best, [best]), key=lambda item: (len(item), item))
+        for clean in members:
+            for original in by_clean.get(clean, [clean]):
+                if original != canonical:
+                    mapping.setdefault(original, canonical)
+    return mapping
+
+
 def store_entities(store, entities: Sequence[dict]) -> int:
     """Write the groups, replacing what was there."""
     ensure_schema(store)
