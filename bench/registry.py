@@ -759,6 +759,49 @@ def bench_remote() -> Dict[str, float]:
             "entries": 50.0}
 
 
+def bench_remote_loop() -> Dict[str, float]:
+    """The loop in-process against the loop over HTTP, same tasks."""
+    from vrusha import orchestrator as orch
+    from vrusha.config import DEFAULTS, ensure_dirs, resolve
+    from vrusha.serve import serve_in_thread
+    from vrusha.store.blackboard import Blackboard
+    from vrusha.store.claims import Claims
+    from vrusha.store.db import Store
+    from vrusha.store.embed import HashEmbedder
+    from vrusha.store.registry import Registry
+
+    cfg = {key: (dict(value) if isinstance(value, dict) else value)
+           for key, value in DEFAULTS.items()}
+    cfg["paths"] = dict(DEFAULTS["paths"])
+    cfg["paths"]["root"] = tempfile.mkdtemp()
+    ensure_dirs(cfg)
+    httpd, _thread = serve_in_thread(cfg, HashEmbedder(32), port=0)
+    base = f"http://127.0.0.1:{httpd.server_address[1]}"
+    store = Store(resolve(cfg, "db"))
+    board = Blackboard(store)
+    claims = Claims(board)
+    registry = Registry(board)
+    tasks = [f"t{index}" for index in range(8)]
+    try:
+        started = time.perf_counter()
+        orch.run_pool(store, board, claims, registry, cfg, "bench",
+                      worker=lambda name: "ok", tasks=tasks, workers=4)
+        local_ms = (time.perf_counter() - started) * 1000.0
+
+        started = time.perf_counter()
+        result = orch.run_remote(store, board, claims, registry, cfg, "bench",
+                                 worker=lambda name: "ok", tasks=tasks,
+                                 base_url=base, workers=4)
+        remote_ms = (time.perf_counter() - started) * 1000.0
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        store.close()
+    return {"local_ms": local_ms, "remote_ms": remote_ms,
+            "overhead_x": remote_ms / max(1e-9, local_ms),
+            "done": float(result.done), "tasks": float(len(tasks))}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -781,6 +824,7 @@ BENCHMARKS: List[tuple] = [
     ("orchestrator", bench_orchestrator, "the loop's own overhead per task"),
     ("pool", bench_pool, "1, 2, 4 and 8 workers on the same 8 tasks"),
     ("remote", bench_remote, "a remote agent's round trip over HTTP"),
+    ("remote_loop", bench_remote_loop, "the loop in-process against over HTTP"),
 ]
 
 

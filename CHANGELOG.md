@@ -8,6 +8,23 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 58 — Part 34: the loop over HTTP · PR #54
+
+- `vrusha/orchestrator.py` — `run_remote()`: the same loop with every board and
+  claim call over HTTP; an L4 agent on another machine claims, works locally,
+  reports back
+- `bench/registry.py` — `remote_loop`; `docs/benchmarks/22-remote-loop.md`
+- `tests/test_orchestrator.py` — 6 more tests
+
+**Measured:** 8 tasks, 4 workers — **58 ms in-process against 227 ms over HTTP,
+3.9×**. Three round trips per task at ~6.5 ms each, and the arithmetic matches.
+
+**The number to design against:** if the work per task is under ~20 ms, the wire
+dominates and a remote agent is a loss. Distribution pays when the *worker* is
+expensive, not when it is cheap. Loopback is the best case; a real network pays more.
+
+---
+
 ## Wave 57 — Part 33: remote agents, and the bug that stopped it · PR #53
 
 - `vrusha/remote.py` — `RemoteBoard`: `append`, `since`, `claim`, `complete`,
