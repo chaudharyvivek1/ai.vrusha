@@ -456,6 +456,26 @@ def bench_snapshot() -> Dict[str, float]:
             "gc_ms": collect["p50_ms"]}
 
 
+def bench_entities() -> Dict[str, float]:
+    """Entities from prose: how fast, and how much of the corpus it reads."""
+    from vrusha.store import prose
+
+    corpus = []
+    for name in sorted(os.listdir(os.path.join(ROOT, "docs"))):
+        if name.endswith(".md"):
+            with open(os.path.join(ROOT, "docs", name), encoding="utf-8") as handle:
+                corpus.append(handle.read())
+    text = "\n".join(corpus)
+    started = time.perf_counter()
+    found = prose.extract(text)
+    seconds = time.perf_counter() - started
+    timings = _timeit(lambda: prose.extract(corpus[0]), repeats=10)
+    return {"entities": float(len(found)),
+            "chars_per_second": len(text) / max(1e-9, seconds),
+            "doc_ms": timings["p50_ms"] * 1000.0,
+            "kinds": float(len(prose.by_kind(found)))}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -468,6 +488,7 @@ BENCHMARKS: List[tuple] = [
     ("serve", bench_serve, "one request through the JSON API"),
     ("index_delta", bench_index_delta, "append vs full rebuild"),
     ("snapshot", bench_snapshot, "pin, read and collect index generations"),
+    ("entities", bench_entities, "entities from prose, over the whole corpus"),
 ]
 
 

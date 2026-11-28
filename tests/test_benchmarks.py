@@ -45,6 +45,7 @@ def test_every_module_is_benchmarked_or_exempt_with_a_reason():
         "vrusha/store/delta.py": "index_delta",
         "vrusha/store/ann.py": "index_delta",
         "vrusha/store/snapshot.py": "snapshot",
+        "vrusha/store/prose.py": "entities",
     }
     exempt = benchmarks.EXEMPT
     missing = []
@@ -66,7 +67,7 @@ def test_the_registry_lists_every_benchmark_it_claims():
     names = [name for name, _function, _what in benchmarks.BENCHMARKS]
     assert names == ["blackboard", "claims", "registry", "address", "rerank",
                      "retrieval", "ingest", "extract", "serve", "index_delta",
-                     "snapshot"]
+                     "snapshot", "entities"]
     assert len(set(names)) == len(names)
 
 
