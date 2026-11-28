@@ -20,6 +20,7 @@
     vrusha joins                  which columns across tables are one entity
     vrusha entities               spellings of one name, across tables
     vrusha board                  the agent blackboard: runs and entries
+    vrusha claims                 who holds which task, and for how much longer
     vrusha math "e^{i\\pi}+1=0"   search stored formulae as formulae
     vrusha research "question"    search, fetch, extract, answer, with sources
     vrusha tools                  which engines this machine can run, and why not
@@ -1063,6 +1064,55 @@ def cmd_board(args, cfg, rules, registry) -> int:
         store.close()
 
 
+def cmd_claims(args, cfg, rules, registry) -> int:
+    """Who holds which task, and for how much longer."""
+    from .store.blackboard import Blackboard
+    from .store.claims import Claims
+
+    store = _open_store(cfg)
+    board = Blackboard(store)
+    claims = Claims(board)
+    try:
+        if not args.run:
+            runs = board.runs()
+            if args.json:
+                print(json.dumps(runs, indent=2, ensure_ascii=False))
+                return 0
+            if not runs:
+                print("no runs yet")
+                return 0
+            _print_table([[item["run"], item["entries"], item["head"]]
+                          for item in runs], ["run", "entries", "head"])
+            return 0
+        if args.reap:
+            expired = claims.reap(args.run)
+            if not args.json:
+                print(f"  {expired} lease(s) expired and made claimable again")
+        rows = claims.list(args.run, state=args.state or None)
+        summary = claims.summary(args.run)
+        if args.json:
+            print(json.dumps({"summary": summary, "claims": rows},
+                             indent=2, ensure_ascii=False, default=str))
+            return 0
+        if not rows:
+            print(f"no claims in run {args.run}")
+            return 0
+        import time as _time
+        table = []
+        for row in rows:
+            left = max(0.0, float(row["lease_until"]) - _time.time())
+            table.append([row["task"], row["state"], row["agent"] or "-",
+                          row["attempts"],
+                          f"{left:.0f}s" if row["state"] == "claimed" else "-"])
+        _print_table(table, ["task", "state", "agent", "tries", "left"])
+        print(f"\n  {summary['done']} done, {summary['claimed']} claimed, "
+              f"{summary['failed']} failed of {summary['total']}")
+        return 0
+    finally:
+        board.close()
+        store.close()
+
+
 def cmd_entities(args, cfg, rules, registry) -> int:
     """Which spellings across tables are the same entity."""
     from .store import entities
@@ -1349,6 +1399,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=200)
     p.add_argument("--all", action="store_true", help="include quarantined entries")
     p.set_defaults(func=cmd_board)
+
+    p = sub.add_parser("claims", parents=[common],
+                       help="who holds which task, and for how much longer")
+    p.add_argument("--run", default="")
+    p.add_argument("--state", default="", choices=["", "claimed", "done", "failed"])
+    p.add_argument("--reap", action="store_true", help="expire leases that ran out")
+    p.set_defaults(func=cmd_claims)
 
     p = sub.add_parser("entities", parents=[common],
                        help="spellings of one name, across tables")

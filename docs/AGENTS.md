@@ -274,7 +274,7 @@ Append-only entries with a monotonic `seq`, stored in SQLite beside the store.
 distinct `seq` values and no lost entry; `since=<seq>` returns exactly the delta;
 replaying the log rebuilds the same state.
 
-### Step 2 — claims and leases
+### Step 2 — claims and leases *(done, wave 34 — `docs/BOARD.md`)*
 `POST /claim` with a TTL, reclaimable after expiry.
 
 **Done means:** 64 agents racing for 10 tasks produce exactly 10 winners; an

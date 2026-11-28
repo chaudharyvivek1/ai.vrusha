@@ -86,7 +86,63 @@ Replay is the second acceptance test: the same entries must always fold to the s
 state. It pages through the log rather than reading a fixed number, because a
 fixed limit would silently fold half a log and produce a state that looks complete.
 
+## Claims: one agent per task
+
+```bash
+vrusha claims --run run-demo
+```
+```
+  task              state    agent  tries  left
+  ----------------  -------  -----  ----  ----
+  extract-tables    claimed  L4/a   1     89s
+  fetch-sources     done     L4/a   1     -
+  verify-citations  claimed  L4/b   1     0s
+
+  1 done, 3 claimed, 0 failed of 4
+```
+
+Sixty-four agents, twelve tasks: exactly twelve must start work. Without a claim
+two agents extract the same table, both write findings, and the board ends up
+with two answers to one question — worse than one answer, because nobody can tell
+which is right.
+
+**One statement does the whole thing.** `INSERT … ON CONFLICT … WHERE` either wins
+the task or does not, with no read-then-write gap for two agents to slip through:
+
+```sql
+INSERT INTO x_claims (run, task, agent, state, attempts, …) VALUES (…)
+ON CONFLICT(run, task) DO UPDATE SET agent = …, lease_until = …, attempts = attempts + 1
+WHERE x_claims.state != 'done'
+  AND (x_claims.lease_until <= now OR x_claims.state = 'failed')
+RETURNING *
+```
+
+| rule | why |
+|---|---|
+| a live lease is never broken | work in progress is not a race |
+| an expired lease is taken over | a dead agent must not stop the run |
+| `done` is final | re-issuing finished work is how a run never ends |
+| `failed` is retryable | a site returning 503 is not a permanent verdict |
+| only the holder renews or completes | otherwise "done" means "whoever got there first" |
+| `attempts` accumulates | a task that keeps killing its worker is visible as a number |
+| a lease of zero duration is refused | it is a lock nobody releases |
+
+`--reap` expires leases that ran out. It is not required for correctness —
+`claim` already takes over an expired lease — but it makes the state readable.
+
+### What the audit of this module found
+
+One bug, caught by the acceptance test rather than by inspection: the first
+version locked only the **write** and then read the row back **outside** the lock.
+Sixty-four threads produced `sqlite3.InterfaceError: bad parameter or other API
+misuse` — two threads using one connection at once. A connection is not safe for
+concurrent statements, not even one writer and one reader, so the lock now covers
+the statement *and* the read that follows it.
+
+That is the same class of bug the blackboard had, one level up: it is not enough
+to serialise the write if the code then reads on the same handle.
+
 ## What is not here yet
 
-Claims and leases (step 2) and the 64-slot registry (step 3). The board is the
-substrate both need.
+The 64-slot registry (step 3), and the orchestrator that uses these two.
+

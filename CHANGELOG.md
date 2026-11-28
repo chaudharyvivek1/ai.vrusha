@@ -8,6 +8,31 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 34 — claims and leases · PR #30
+
+Step 2 of `docs/AGENTS.md`: one agent per task, and a lease so a dead agent lets
+go.
+
+- `vrusha/store/claims.py` — `claim`, `renew`, `release`, `complete`, `reap`,
+  `summary`, `list`; one `INSERT … ON CONFLICT … WHERE … RETURNING` does the
+  arbitration, so there is no read-then-write gap
+- `vrusha claims --run X [--state] [--reap]`
+- `tests/test_claims.py` — 17 tests, including 64 threads racing for 10 tasks and
+  6 processes doing the same
+
+**The rules, each with a test:** a live lease is never broken; an expired one is
+taken over; `done` is final; `failed` is retryable; only the holder renews or
+completes; `attempts` accumulates so a poison task is visible; a zero-duration
+lease is refused.
+
+**One bug, caught by the acceptance test:** the first version locked the write and
+then read the row back **outside** the lock. Sixty-four threads produced
+`sqlite3.InterfaceError: bad parameter or other API misuse` — two threads on one
+connection. Same class as the blackboard's bug, one level up: serialising the write
+is not enough if the code then reads on the same handle.
+
+---
+
 ## Wave 33 — the blackboard · PR #29
 
 Step 1 of `docs/AGENTS.md`: the shared log the agents will read and write.
