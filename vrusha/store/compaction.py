@@ -170,3 +170,49 @@ def verify(summary: Summary, entries: Sequence) -> Dict[str, object]:
     return {"ok": not problems, "problems": problems,
             "checked": len(inside),
             "ratio": round(summary.ratio, 3)}
+
+
+# ---------------------------------------------------------------------------
+# Part 29: offload
+# ---------------------------------------------------------------------------
+
+
+def offload(board, entries: Sequence, run: str, *,
+            limit: int = OFFLOAD_TOKENS) -> tuple:
+    """Replace every oversized entry with a reference to the board entry.
+
+    The context keeps its shape — one line where the entry was, in the same order —
+    and loses only the bytes. The full text is appended to the blackboard as an
+    `artifact` entry, so it is still readable by any agent and still in the log.
+
+    A reference is better than a truncation: `board:417` can be followed, and a
+    truncated 20,000-token page is just a shorter page with a hole in it.
+    """
+    from dataclasses import replace as _replace
+
+    kept, offloaded = [], []
+    for entry in entries:
+        if tokens(getattr(entry, "summary", "")) < int(limit):
+            kept.append(entry)
+            continue
+        original = getattr(entry, "summary", "") or ""
+        written = board.append(
+            run,
+            task=getattr(entry, "task", "") or "",
+            agent=getattr(entry, "agent", "") or "offload",
+            kind="artifact",
+            summary=f"offloaded from seq {getattr(entry, 'seq', '?')}: "
+                    f"{original[:200]}",
+            refs=[f"seq:{getattr(entry, 'seq', 0)}"],
+            payload={"chars": len(original), "text": original})
+        reference = (f"[offloaded seq {getattr(entry, 'seq', '?')} -> "
+                     f"board:{written.seq}, {tokens(original):,} tokens]")
+        kept.append(_replace(entry, summary=reference))
+        offloaded.append({"seq": getattr(entry, "seq", 0),
+                          "board_seq": written.seq,
+                          "tokens": tokens(original)})
+    return kept, {"offloaded": len(offloaded), "details": offloaded,
+                  "tokens_before": sum(tokens(getattr(e, "summary", ""))
+                                       for e in entries),
+                  "tokens_after": sum(tokens(getattr(e, "summary", ""))
+                                      for e in kept)}

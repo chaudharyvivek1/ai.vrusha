@@ -12,6 +12,8 @@
 | `tokens_after` | 1,749 |
 | `ratio` | 0.231 |
 | `verified` | 1 |
+| `offload_ms` | 3.72 |
+| `offload_ratio` | 0.0 |
 
 ## What each number is
 
@@ -23,6 +25,15 @@
 
 `verified=1`. A summary is only usable if the things that must survive did survive,
 and that is checked against the entries it claims to replace — not assumed.
+
+## The offload path
+
+An entry past 20,000 tokens is written to the blackboard and replaced by a
+reference: `[offloaded seq 7 -> board:417, 25,000 tokens]`. That costs **3.72 ms**
+and the ratio rounds to **0.0** — a 25,000-token entry becomes about fifteen tokens,
+and the full text is still readable at `board:417`.
+
+A reference beats a truncation: it can be followed, and it says where the bytes went.
 
 ## Method
 
