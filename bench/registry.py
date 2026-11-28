@@ -908,6 +908,41 @@ def bench_safety() -> Dict[str, float]:
             "neutralise_ms": neutral["p50_ms"], "kb": len(clean) / 1024.0}
 
 
+def bench_fuzz() -> Dict[str, float]:
+    """Rubbish through the parsers: how fast, and does anything crash?
+
+    The number is throughput, but the point is `crashes=0`: a parser that survives
+    fuzzing is a parser a caller can trust with a page it did not choose.
+    """
+    import random as _random
+    import string as _string
+
+    from vrusha import safety
+    from vrusha.store import mathquery, records
+    from vrusha.store.db import Store
+
+    rng = _random.Random(7)
+    alphabet = _string.printable + "\x00\u2603"
+    payloads = ["".join(rng.choice(alphabet) for _ in range(300)) for _ in range(40)]
+
+    store = Store(tempfile.mktemp(suffix=".db"))
+    document = store.add_document(url="https://a.test/f", title="f", text="body")
+    crashes, started = 0, time.perf_counter()
+    for payload in payloads:
+        try:
+            records.extract_document(store, document, payload, "https://a.test/f")
+            safety.scan(payload)
+            safety.neutralise(payload)
+            mathquery.extract_math(payload)
+        except Exception:                    # noqa: BLE001 - counting, not handling
+            crashes += 1
+    seconds = time.perf_counter() - started
+    store.close()
+    return {"payloads": float(len(payloads)), "crashes": float(crashes),
+            "ms": seconds * 1000.0,
+            "per_second": len(payloads) / max(1e-9, seconds)}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -936,6 +971,7 @@ BENCHMARKS: List[tuple] = [
     ("ocr", bench_ocr, "identifying an image, which needs no binary"),
     ("beir", bench_beir, "reading a BEIR set and scoring one query"),
     ("safety", bench_safety, "scanning a page for instructions"),
+    ("fuzz", bench_fuzz, "rubbish through the parsers, and whether it crashes"),
 ]
 
 
