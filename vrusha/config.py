@@ -118,6 +118,11 @@ DEFAULTS: Dict[str, Any] = {
         "min_vector_similarity": 0.05,
         "refuse_below": 0.02,
     },
+    "harvest": {
+        #: `none` keeps the core dependency-free. `playwright` needs a 300 MB
+        #: browser; see docs/work/part-36-render.md for why it is not the default.
+        "render": {"backend": "none"},
+    },
     "graph": {
         #: Off by default: a graph boost that has not been measured against its
         #: absence is a preference, not an improvement.

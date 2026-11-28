@@ -845,6 +845,23 @@ def bench_compare() -> Dict[str, float]:
             "questions": float(result.questions)}
 
 
+def bench_render() -> Dict[str, float]:
+    """Shell detection must be free, or it is a browser call in disguise."""
+    from vrusha.harvest import render
+
+    shell = ('<html><body><div id="root"></div>'
+             + '<script src="/app.js"></script>' * 30 + "</body></html>")
+    real = ("<html><body><p>" + "the licence gate refuses a page. " * 40
+            + "</p></body></html>")
+    detect = _timeit(lambda: render.looks_like_a_shell(shell), repeats=50)
+    detect_real = _timeit(lambda: render.looks_like_a_shell(real), repeats=50)
+    text = _timeit(lambda: render.visible_text(shell), repeats=50)
+    return {"shell_us": detect["p50_ms"] * 1000.0,
+            "real_us": detect_real["p50_ms"] * 1000.0,
+            "text_us": text["p50_ms"] * 1000.0,
+            "shell_bytes": float(len(shell))}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -869,6 +886,7 @@ BENCHMARKS: List[tuple] = [
     ("remote", bench_remote, "a remote agent's round trip over HTTP"),
     ("remote_loop", bench_remote_loop, "the loop in-process against over HTTP"),
     ("compare", bench_compare, "four levels against one agent, same questions"),
+    ("render", bench_render, "shell detection, which must be free"),
 ]
 
 
