@@ -50,6 +50,14 @@ DEFAULTS: Dict[str, Any] = {
         "same_domain": True,
         "min_words": 120,              # below this a page is boilerplate
         "search_results": 10,
+        #: simple | trafilatura | auto. The default is `simple` on purpose: a
+        #: corpus must not change character because an optional package happens
+        #: to be installed on one machine. Set `trafilatura` to opt in, or `auto`
+        #: to use it when present. It removes boilerplate the tag stripper cannot
+        #: identify -- cookie banners, sidebars, "related articles" -- on pages
+        #: with enough structure for it to tell boilerplate from content. On a
+        #: thin page it keeps everything, which is the safe direction.
+        "extractor": "simple",
         "backend": "auto",             # auto | fixtures | ddg | searxng | tavily | brave
     },
     "store": {

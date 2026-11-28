@@ -161,14 +161,39 @@ def cmd_harvest(args, cfg, rules, registry) -> int:
     store = _open_store(cfg)
     report = ingest_documents(docs, store, cfg, rules, registry, _embedder(cfg, args.verbose),
                               licence=args.licence, verbose=args.verbose)
+
+    extracted = {"tables": 0, "rows": 0, "documents": 0}
+    if args.extract:
+        # the page is already fetched, gated and stored: read its markup for
+        # tables and JSON-LD rather than re-inferring them from flattened text
+        from .store.db import url_hash
+        from .store.records import extract_document
+        for doc in ok:
+            html = getattr(doc, "html", "")
+            if not html:
+                continue
+            row = store.conn.execute(
+                "SELECT doc_id FROM documents WHERE url_hash = ?",
+                (url_hash(doc.url),)).fetchone()
+            if row is None:
+                continue
+            summary = extract_document(store, int(row[0]), html, doc.url,
+                                       dayfirst=not args.mdy)
+            extracted["tables"] += int(summary["tables"])
+            extracted["rows"] += int(summary["rows"])
+            extracted["documents"] += 1
     store.close()
     if args.json:
         print(json.dumps({"harvest": {"documents": len(docs), "ok": len(ok)},
-                          "ingest": report.to_dict(), "manifest": manifest_path}, indent=2))
+                          "ingest": report.to_dict(), "extract": extracted,
+                          "manifest": manifest_path}, indent=2))
         return 0
     print()
     print(f"  stored    {report.stored} document(s), {report.chunks} chunk(s), "
           f"{report.embedded} embedded")
+    if args.extract:
+        print(f"  extracted {extracted['tables']} table(s), {extracted['rows']} row(s) "
+              f"from {extracted['documents']} document(s)")
     if report.rejected:
         print(f"  rejected  {report.rejected}")
         for reason, count in list(report.by_reason.items())[:8]:
@@ -905,6 +930,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--depth", type=int, default=2)
     p.add_argument("--any-domain", action="store_true", help="follow links off the seed domain")
     p.add_argument("--backend", default=None)
+    p.add_argument("--extract", action="store_true",
+                   help="also extract tables and JSON-LD from the fetched markup")
+    p.add_argument("--mdy", action="store_true", help="month-first dates (US corpora)")
     p.add_argument("--no-ingest", action="store_true", help="fetch and record, do not store")
     p.set_defaults(func=cmd_harvest)
 

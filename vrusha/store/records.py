@@ -216,6 +216,44 @@ def _read(path: str) -> str:
         return handle.read()
 
 
+def extract_document(store, doc_id: int, raw: str, source: str, *,
+                    dayfirst: bool = True) -> Dict[str, object]:
+    """Tables and JSON-LD from an in-memory page, against a document already stored.
+
+    This is what `harvest --extract` calls: the page was fetched, gated and
+    stored, and its markup is still in hand, so there is no reason to re-read it
+    from disk or to infer a table from flattened text.
+    """
+    ensure_schema(store)
+    tables = tables_from_html(raw, source=source)
+
+    # re-extracting a document must replace its records, not double them
+    store.conn.execute("DELETE FROM x_tables WHERE doc_id = ?", (doc_id,))
+
+    stored: List[Dict[str, object]] = []
+    rejected = 0
+    base = os.path.basename(source) or "page"
+    for number, table in enumerate(tables, start=1):
+        summary = store_table(store, table, doc_id, dayfirst=dayfirst,
+                              name=f"{base}#{number}")
+        if summary is None:
+            rejected += 1
+        else:
+            stored.append(summary)
+
+    from .jsonld import entities as jsonld_entities
+    for entity_table in jsonld_entities(raw, source=source):
+        summary = store_entity_table(store, entity_table, doc_id)
+        if summary is None:
+            rejected += 1
+        else:
+            stored.append(summary)
+
+    store.commit()
+    return {"tables": len(stored), "rows": sum(int(s["rows"]) for s in stored),
+            "rejected": rejected, "stored": stored}
+
+
 def extract_path(store, path: str, *, licence: Optional[str] = None,
                  dayfirst: bool = True, verbose: bool = True) -> Dict[str, object]:
     """One file: HTML tables or a CSV, stored against a document."""
