@@ -8,6 +8,29 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 29 — the JSON API reaches everything · PR #25
+
+The server had `/search` and `/ask`; the extraction layer, the entity groups and
+the three tools were CLI-only, so a client in another language could not reach
+them at all.
+
+- `vrusha/serve.py` — `GET /` (a route index), `/tables`, `/tables/<id>`,
+  `/entities`, `/tools`, and `POST /math`
+- `docs/SERVE.md` — every route, with `curl` examples, and what is deliberately
+  not a route
+- `tests/test_serve.py` — 9 tests against a real threaded server
+
+**What is not a route:** `research` fetches the web. A client that holds a socket
+open for a page fetch, an extraction and an answer has been given a timeout
+problem, not a feature — so it stays a command, and `GET /` says so under
+`not_here` rather than leaving it to be guessed.
+
+**On the JS/TS question:** there is no JavaScript or TypeScript in this
+repository — zero files. The server is `http.server` from the standard library;
+the API is JSON so a client in any language can use it.
+
+---
+
 ## Wave 28 — the N+1 in `retrieve()` · PR #24
 
 With the address ranking fixed, the next question was what the rest of the query
