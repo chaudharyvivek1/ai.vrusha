@@ -8,6 +8,32 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 71 — the second shape: a dependency graph · PR #68
+
+- `vrusha/orchestrator.py` — `levels()` computes waves from `[(name, [after...])]`;
+  `run_graph()` runs them and **blocks dependents of a failed task**
+- `vrusha/orchestrator.py` — `run_stages(..., skip_if=...)`, so a task that must not
+  run is skipped **before** it is claimed
+- `tests/test_orchestrator.py` — 10 more tests
+
+**Refusals:** a cycle (`CycleError`, naming it), an unknown dependency and a
+duplicate task name (`ValueError`, naming them) — a bad plan does not run partially.
+
+**The policy the staged version left undefined:** if `a` fails, `b` is marked
+`blocked by a` and `c` `blocked by b`, and **neither executes**. A test asserts that
+by recording every task the worker saw.
+
+**Three errors:** `run.failed = ...` hit a property with no setter (the class was
+right); a blocked task still ran because the check happened *after* the run instead
+of inside the worker; and **an edit matched both `run_pool` and `run_stages` for the
+second wave in a row**, because their `work()` bodies are identical — the lesson is
+that they should share one implementation.
+
+**Honest state:** tested, not yet benchmarked on a real goal — the `multistep`
+benchmark still uses two linear stages.
+
+---
+
 ## Wave 70 — a multi-step goal, and the bug it uncovered · PR #67
 
 - `vrusha/orchestrator.py` — `run_stages()`: tasks in **waves**, with a **thread-local

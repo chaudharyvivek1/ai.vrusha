@@ -455,3 +455,96 @@ def test_repeated_execution_never_gives_a_zero_finding_run(tmp_path):
                     if entry.kind == "finding"]
         assert len(findings) == 4, f"run {attempt} persisted {len(findings)}"
         store.close()
+
+
+# ---------------------------------------------------------------------------
+# the dependency graph
+# ---------------------------------------------------------------------------
+
+
+def test_a_linear_chain_is_one_task_per_wave():
+    assert orch.levels([("a", []), ("b", ["a"]), ("c", ["b"])]) == \
+        [["a"], ["b"], ["c"]]
+
+
+def test_a_diamond_runs_the_middle_wave_in_parallel():
+    assert orch.levels([("a", []), ("b", ["a"]), ("c", ["a"]),
+                        ("d", ["b", "c"])]) == [["a"], ["b", "c"], ["d"]]
+
+
+def test_independent_tasks_share_the_first_wave():
+    assert orch.levels([("a", []), ("b", []), ("c", [])]) == [["a", "b", "c"]]
+
+
+def test_a_cycle_is_refused_and_named():
+    with pytest.raises(orch.CycleError) as error:
+        orch.levels([("a", ["b"]), ("b", ["a"])])
+    assert "cycle" in str(error.value)
+
+
+def test_an_unknown_dependency_is_refused():
+    with pytest.raises(ValueError) as error:
+        orch.levels([("a", ["nowhere"])])
+    assert "nowhere" in str(error.value)
+
+
+def test_a_duplicate_task_name_is_refused():
+    with pytest.raises(ValueError) as error:
+        orch.levels([("a", []), ("a", [])])
+    assert "duplicate" in str(error.value)
+
+
+def test_the_graph_runs_in_dependency_order(tmp_path):
+    order = []
+
+    def worker(task):
+        order.append(task)
+        return "ok"
+
+    store, board, claims, registry, cfg = _pieces(tmp_path)
+    result = orch.run_graph(store, board, claims, registry, cfg, "graph",
+                            tasks=[("a", []), ("b", ["a"]), ("c", ["a"]),
+                                   ("d", ["b", "c"])],
+                            worker=worker, workers=3, run_id="g1")
+    assert result.done == 4 and result.failed == 0
+    assert order.index("a") < order.index("b")
+    assert order.index("b") < order.index("d")
+    assert order.index("c") < order.index("d")
+    store.close()
+
+
+def test_a_blocked_task_fails_explicitly(tmp_path):
+    """The partial-result policy: a dependent never runs on missing input."""
+    ran = []
+
+    def worker(task):
+        ran.append(task)
+        if task == "a":
+            raise RuntimeError("upstream is down")
+        return "ok"
+
+    store, board, claims, registry, cfg = _pieces(tmp_path)
+    result = orch.run_graph(store, board, claims, registry, cfg, "graph",
+                            tasks=[("a", []), ("b", ["a"]), ("c", ["b"])],
+                            worker=worker, workers=2, run_id="g1")
+    assert result.tasks[0].state == "failed"
+    assert result.tasks[1].state == "failed"
+    assert "blocked by a" in result.tasks[1].error
+    assert "blocked by b" in result.tasks[2].error
+    assert "b" not in ran and "c" not in ran, f"a blocked task ran: {ran}"
+    store.close()
+
+
+def test_a_dependent_runs_when_its_dependencies_succeed(tmp_path):
+    store, board, claims, registry, cfg = _pieces(tmp_path)
+    result = orch.run_graph(store, board, claims, registry, cfg, "graph",
+                            tasks=[("a", []), ("b", ["a"])],
+                            worker=lambda task: "ok", workers=2, run_id="g1")
+    assert result.done == 2 and result.failed == 0
+    store.close()
+
+
+def test_the_graph_and_the_stages_agree_on_a_linear_plan(tmp_path):
+    """A chain is a graph with one dependency per task -- the shapes must agree."""
+    assert orch.levels([("x", []), ("y", ["x"])]) == [["x"], ["y"]]
+    assert orch.levels([("x", []), ("y", [])]) == [["x", "y"]]
