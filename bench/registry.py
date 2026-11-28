@@ -733,6 +733,32 @@ def bench_pool() -> Dict[str, float]:
     return numbers
 
 
+def bench_remote() -> Dict[str, float]:
+    """A remote agent's round trip: append and delta read over HTTP."""
+    from vrusha.config import DEFAULTS, ensure_dirs, resolve
+    from vrusha.remote import RemoteBoard
+    from vrusha.serve import serve_in_thread
+    from vrusha.store.embed import HashEmbedder
+
+    cfg = {key: (dict(value) if isinstance(value, dict) else value)
+           for key, value in DEFAULTS.items()}
+    cfg["paths"] = dict(DEFAULTS["paths"])
+    cfg["paths"]["root"] = tempfile.mkdtemp()
+    ensure_dirs(cfg)
+    httpd, _thread = serve_in_thread(cfg, HashEmbedder(32), port=0)
+    board = RemoteBoard(f"http://127.0.0.1:{httpd.server_address[1]}")
+    try:
+        for index in range(50):
+            board.append("bench", summary=f"entry {index}")
+        append = _timeit(lambda: board.append("bench", summary="x"), repeats=20)
+        delta = _timeit(lambda: board.since("bench", 40), repeats=20)
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    return {"append_ms": append["p50_ms"], "delta_ms": delta["p50_ms"],
+            "entries": 50.0}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -754,6 +780,7 @@ BENCHMARKS: List[tuple] = [
     ("anticipate", bench_anticipate, "the prefetch cache: put, hit, miss"),
     ("orchestrator", bench_orchestrator, "the loop's own overhead per task"),
     ("pool", bench_pool, "1, 2, 4 and 8 workers on the same 8 tasks"),
+    ("remote", bench_remote, "a remote agent's round trip over HTTP"),
 ]
 
 

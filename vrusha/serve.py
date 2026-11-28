@@ -44,6 +44,26 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _query(self) -> dict:
+        from urllib.parse import parse_qs, urlparse
+        parsed = parse_qs(urlparse(self.path).query)
+        return {key: values[0] for key, values in parsed.items() if values}
+
+    def _board(self):
+        """The server's single board, created at startup.
+
+        Not one per request: constructing a `Blackboard` opens a second SQLite
+        connection and runs the schema, and doing that inside a request handler
+        made `POST /board` hang until the client gave up. One connection, one
+        writer, created once -- the same rule the store already follows.
+        """
+        board = getattr(self.server, "board", None)
+        if board is None:
+            from .store.blackboard import Blackboard
+            board = Blackboard(self.server.store)
+            self.server.board = board
+        return board
+
     def _body(self) -> dict:
         length = int(self.headers.get("content-length") or 0)
         if not length:
@@ -88,6 +108,21 @@ class _Handler(BaseHTTPRequestHandler):
             return self._table(path.rsplit("/", 1)[-1])
         if path == "/entities":
             return self._entities()
+        if path == "/board":
+            query = self._query()
+            run = str(query.get("run", ""))
+            since = int(query.get("since", 0) or 0)
+            limit = int(query.get("limit", 100) or 100)
+            board = self._board()
+            entries = board.since(run, since, limit=limit) if run else []
+            return self._send(200, {"entries": [
+                {"seq": entry.seq, "task": entry.task, "agent": entry.agent,
+                 "kind": entry.kind, "summary": entry.summary,
+                 "refs": list(entry.refs)} for entry in entries]})
+        if path == "/agents":
+            from .store.registry import Registry
+            run = str(self._query().get("run", ""))
+            return self._send(200, Registry(self._board()).summary(run))
         if path == "/tools":
             from .tools import describe_all
             return self._send(200, {"tools": describe_all()})
@@ -106,6 +141,35 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             return self._send(400, {"error": f"bad json: {exc}"})
 
+        if path == "/board":
+            # `body` was already read at the top of do_POST. Calling _body() again
+            # blocks forever: the stream is drained and read() waits for bytes
+            # that will never arrive. That was the Part 33 hang.
+            board = self._board()
+            try:
+                entry = board.append(
+                    str(body.get("run", "")), task=str(body.get("task", "")),
+                    agent=str(body.get("agent", "")),
+                    kind=str(body.get("kind", "finding")),
+                    summary=str(body.get("summary", "")),
+                    refs=list(body.get("refs", []) or []),
+                    payload=dict(body.get("payload", {}) or {}))
+            except Exception as exc:                 # noqa: BLE001 - a refusal is data
+                return self._send(400, {"error": str(exc)})
+            return self._send(201, {"seq": entry.seq, "quarantined": entry.quarantined})
+        if path == "/claim":
+            from .store.claims import Claims
+            granted = Claims(self._board()).claim(
+                str(body.get("run", "")), str(body.get("task", "")),
+                str(body.get("agent", "")), ttl=float(body.get("ttl", 60.0)))
+            return self._send(200, {"granted": granted.granted,
+                                    "reason": granted.reason})
+        if path == "/complete":
+            from .store.claims import Claims
+            ok = Claims(self._board()).complete(
+                str(body.get("run", "")), str(body.get("task", "")),
+                str(body.get("agent", "")), status=str(body.get("status", "done")))
+            return self._send(200, {"ok": bool(ok)})
         if path == "/search":
             return self._search(router, body)
         if path == "/ask":

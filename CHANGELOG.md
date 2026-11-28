@@ -8,6 +8,30 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 57 — Part 33: remote agents, and the bug that stopped it · PR #53
+
+- `vrusha/remote.py` — `RemoteBoard`: `append`, `since`, `claim`, `complete`,
+  `agents` over HTTP
+- `vrusha/serve.py` — `GET/POST /board`, `POST /claim`, `POST /complete`,
+  `GET /agents`; one board created at startup, not one per request
+- `bench/registry.py` — `remote`; `docs/benchmarks/21-remote.md`
+- `tests/test_remote.py` — 13 tests
+
+**The bug was not SQLite.** Two hypotheses — a second connection blocking, then a
+per-request connection — were both disproved by measurement. The cause was found by
+logging each stage of `do_POST` to a file: **`do_POST` reads the body once at the
+top, and my `/board` branch called `self._body()` a second time.** On a drained
+stream, `rfile.read(length)` blocks forever, the handler never writes a response,
+and the client hangs.
+
+**The fix is one line per route:** use the `body` already read. `POST /board` went
+from hanging to **201 in 6.5 ms**; the nine remote tests went from 75 s of timeouts
+to **13 tests in 7.2 s**.
+
+**Measured:** remote append 6.55 ms against 1.29 ms in-process — 5×, not 50×.
+
+---
+
 ## Wave 56 — Part 32: the bounded worker pool · PR #52
 
 - `vrusha/orchestrator.py` — `run_pool()`, the same loop over a `ThreadPoolExecutor`
