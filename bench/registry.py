@@ -476,6 +476,40 @@ def bench_entities() -> Dict[str, float]:
             "kinds": float(len(prose.by_kind(found)))}
 
 
+def bench_edges() -> Dict[str, float]:
+    """Relations from prose, with evidence — how many, and how fast."""
+    from vrusha.store import edges as edges_mod
+
+    corpus = []
+    for name in sorted(os.listdir(os.path.join(ROOT, "docs"))):
+        if name.endswith(".md"):
+            with open(os.path.join(ROOT, "docs", name), encoding="utf-8") as handle:
+                corpus.append(handle.read())
+    text = "\n".join(corpus)
+    started = time.perf_counter()
+    found = edges_mod.extract(text)
+    seconds = time.perf_counter() - started
+    with_evidence = sum(1 for edge in found if edge.sentence)
+
+    # The documentation corpus is technical prose, and these patterns are business
+    # relations -- so it produces no edges. That is a fact worth reporting, not a
+    # zero to hide: the fixture below is the corpus the extractor is *for*.
+    fixture = (
+        "Acme Corporation acquired Beta Limited in March. "
+        "Beta Limited supplies steel to Gamma Industries. "
+        "Gamma Industries is a subsidiary of Acme Corporation. "
+        "Dr. Meera Rao joined the Reserve Bank of India. "
+        "Acme Corporation partnered with Delta Systems."
+    )
+    fixture_edges = edges_mod.extract(fixture)
+    return {"edges": float(len(found)),
+            "with_evidence": float(with_evidence),
+            "chars_per_second": len(text) / max(1e-9, seconds),
+            "predicates": float(len({edge.predicate for edge in found})),
+            "fixture_edges": float(len(fixture_edges)),
+            "fixture_evidence": float(sum(1 for e in fixture_edges if e.sentence))}
+
+
 BENCHMARKS: List[tuple] = [
     ("blackboard", bench_blackboard, "append, delta read, replay"),
     ("claims", bench_claims, "claim arbitration, summary"),
@@ -489,6 +523,7 @@ BENCHMARKS: List[tuple] = [
     ("index_delta", bench_index_delta, "append vs full rebuild"),
     ("snapshot", bench_snapshot, "pin, read and collect index generations"),
     ("entities", bench_entities, "entities from prose, over the whole corpus"),
+    ("edges", bench_edges, "relations with evidence, over the whole corpus"),
 ]
 
 
