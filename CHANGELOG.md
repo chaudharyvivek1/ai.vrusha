@@ -8,6 +8,32 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 43 — Part 18: delta segments, 24× faster than a rebuild · PR #39
+
+Phase 3. An append no longer rewrites the index.
+
+- `vrusha/store/delta.py` — a base index plus append-only segments; `append()`
+  writes one small segment and never opens the base for writing; `search()`
+  merges base and segments by cosine; `should_compact()` / `compact()` fold them
+  back; a corrupt segment is skipped, not fatal
+- `bench/registry.py` — `index_delta`, append against a rebuild
+- `tests/test_delta.py` — 9 tests
+
+**Measured:** adding 200 vectors to a 4,000-vector index costs **15.9 ms against
+383 ms — 24× faster** — and a test asserts the base files' mtimes are unchanged.
+Merged search matches the exact scan (recall@5 = 1.0) and costs 8.2 ms.
+
+**The design trade, stated:** segments are brute-forced, because they are small by
+construction and brute force over a few thousand rows beats building routing
+structures for them. That is why the segment count is capped — past the cap,
+compaction stops being an optimisation and becomes a latency requirement.
+
+**Bug:** `np.save` silently appends `.npy` to a string path, so the per-file
+rename looked for a file that did not exist. The segment is now written to a
+temporary directory and renamed whole, which is more atomic anyway.
+
+---
+
 ## Wave 42 — Part 16: the cross-encoder, built and not adopted · PR #38
 
 - `vrusha/rerank.py` — `CrossEncoderReranker` over **ONNX, not torch** (15 MB

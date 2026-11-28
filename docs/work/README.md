@@ -49,7 +49,7 @@ Status: `[x]` done · `[~]` partly · `[ ]` not started · `[-]` deliberately sk
 
 | # | part | status |
 |---|---|---|
-| 18 | delta segments | `[ ]` |
+| 18 | delta segments | `[x]` | [part-18](part-18-delta-index.md) — **24× faster than a rebuild** |
 | 19 | upsert and delete | `[ ]` |
 | 20 | background compaction | `[ ]` |
 | 21 | versioned snapshots | `[ ]` |
@@ -139,6 +139,7 @@ look".
 | before Part 14 | `ruff`, the 40-question run, the set loader | nothing — clean |
 | before Part 15 | `ruff`, the 40-question run, the benchmark inventory | 39 modules had no benchmark — now measured or exempted with a reason |
 | before Part 16 | `ruff`, the 40-question run | the reranker was handed all 60 candidates, not the top of the list |
+| before Part 18 | `ruff`, the 40-question run, the benchmark table | nothing — clean |
 
 ## The benchmark list
 
@@ -157,3 +158,4 @@ benchmark nor a written reason.
 | ingest | documents to chunks and vectors |
 | extract | fixtures to typed tables |
 | serve | one request through the JSON API |
+| index_delta | append against a full rebuild |
