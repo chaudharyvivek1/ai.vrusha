@@ -8,6 +8,26 @@ Format: **what changed** · **new files** · **the bug the tests or the demo fou
 
 ---
 
+## Wave 63 — Part 39: the injection surface · PR #60
+
+- `vrusha/safety.py` — nine patterns for text written to be obeyed, with severities,
+  spans, `is_hostile()`, `neutralise()` and a summary
+- `bench/registry.py` — `safety`; `docs/benchmarks/27-safety.md`
+- `tests/test_safety.py` — 18 tests
+
+**The bug that shaped it:** the first scanner flagged **its own documentation** —
+`"This document explains how to ignore previous instructions"` came back hostile.
+Fixed with a mention rule (severity 3 → 2 when the sentence explains the phrase) and
+a context window that looks **both ways**, because `BOARD.md` quotes the phrase and
+explains it *after*. **No document in this repository is now flagged**, and that is
+a test.
+
+**The benchmark forced an improvement:** scanning 11 KB cost **4.76 ms — a 50% tax on
+a 9 ms query**. A keyword gate (24 words, any of which every pattern needs) took the
+common case to **0.113 ms — 42× faster** — while the hostile case is unchanged.
+
+---
+
 ## Wave 62 — Part 38: external datasets, Phase 7 closed · PR #59
 
 - `vrusha/eval_sets/beir.py` — the BEIR format (corpus/queries/qrels), a scorer for
