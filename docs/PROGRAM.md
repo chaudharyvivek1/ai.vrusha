@@ -5,8 +5,8 @@ that works rather than a document that says it does.
 
 | # | part | done means |
 |---|---|---|
-| 1 | **Math layer** — find, store and search equations | `vrusha math "e^{i\pi}+1=0"` returns the pages that state it, with sources |
-| 2 | **Research loop** — question to answer with sources | `vrusha research "what is the Euler identity"` searches, fetches, extracts, answers, and lists every source with its licence |
+| 1 | ~~**Math layer**~~ — done (`vrusha/store/mathquery.py`, `vrusha math`, `docs/MATH.md`) |
+| 2 | ~~**Research loop**~~ — done (`vrusha/research.py`, `vrusha research`, `docs/RESEARCH.md`) |
 | 3 | **dubforge** merged as a tool | `vrusha tools` lists it; its jobs run through one interface |
 | 4 | **forge3d** merged as a tool | same |
 | 5 | **cutforge** merged as a tool | same |

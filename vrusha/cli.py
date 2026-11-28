@@ -19,6 +19,7 @@
     vrusha derive                 a computed column, from a checked formula
     vrusha joins                  which columns across tables are one entity
     vrusha math "e^{i\\pi}+1=0"   search stored formulae as formulae
+    vrusha research "question"    search, fetch, extract, answer, with sources
     vrusha verify --refetch       is what we stored still true?
     vrusha index build            the vector index: routed scan over int8
     vrusha index export           push the same chunks into RagForge
@@ -892,6 +893,28 @@ def cmd_derive(args, cfg, rules, registry) -> int:
     return 0
 
 
+def cmd_research(args, cfg, rules, registry) -> int:
+    """Search, fetch, extract, answer — and show every source."""
+    from .research import render, research
+
+    store = _open_store(cfg)
+    try:
+        result = research(store, _embedder(cfg), cfg, args.question, rules=rules,
+                          registry=registry, limit=args.limit,
+                          backend=args.backend, top_k=args.top_k,
+                          verify=args.verify, licence=args.licence,
+                          verbose=not args.json)
+    finally:
+        store.close()
+
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        return 0 if result.get("answer") else 1
+    print()
+    print(render(result))
+    return 0 if result.get("answer") else 1
+
+
 def cmd_math(args, cfg, rules, registry) -> int:
     """Search the stored formulae as formulae, with sources."""
     from .store.records import list_equations, search_equations
@@ -1157,6 +1180,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=0, help="files to process")
     p.add_argument("--mdy", action="store_true", help="month-first dates (US corpora)")
     p.set_defaults(func=cmd_extract)
+
+    p = sub.add_parser("research", parents=[common],
+                       help="search, fetch, extract, answer — with sources")
+    p.add_argument("question")
+    p.add_argument("--limit", type=int, default=5, help="pages to fetch")
+    p.add_argument("--backend", default="auto")
+    p.add_argument("--top-k", type=int, default=8)
+    p.add_argument("--verify", action="store_true",
+                   help="re-fetch each source and report whether it still says the same")
+    p.add_argument("--licence", default=None,
+                   help="licence to assert for the fetched pages; unknown is a refusal")
+    p.set_defaults(func=cmd_research)
 
     p = sub.add_parser("math", parents=[common],
                        help="search stored formulae as formulae")

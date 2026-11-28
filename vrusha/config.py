@@ -112,6 +112,12 @@ DEFAULTS: Dict[str, Any] = {
         "min_vector_similarity": 0.05,
         "refuse_below": 0.02,
     },
+    "research": {
+        #: How many pages to fetch and how many chunks to answer from. The gates
+        #: themselves are not configurable here: a short page is still refused.
+        "limit": 5,
+        "top_k": 8,
+    },
     "ann": {
         # auto    use the index when one exists, is fresh, and is big enough
         # force   use it even on a small corpus (for measuring it)
