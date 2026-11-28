@@ -7,7 +7,8 @@ next person does not have to open all of them.
 
 | document | what it answers |
 |---|---|
-| [MASTER-PLAN.md](MASTER-PLAN.md) | **where this is going**: the benchmark landscape, a 70-skill inventory, and six phases |
+| [PLAN-V3.md](PLAN-V3.md) | **the current plan**: the review, the repo, and forty parts in nine phases |
+| [MASTER-PLAN.md](MASTER-PLAN.md) | the previous plan: the benchmark landscape, a 70-skill inventory, six phases |
 | [PROGRAM.md](PROGRAM.md) | the previous six-part programme, all of it done |
 | [AGENTS.md](AGENTS.md) | the four-level agent design: context, limits, security, ten steps |
 | [CHANGELOG.md](../CHANGELOG.md) | every wave, in order, with the bug each one found |
